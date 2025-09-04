@@ -1,8 +1,7 @@
-const Branch = require('../models/branchModel');
-const { Inventory } = require('../models/inventoryModel');
-const { logAction } = require('../utils/auditLogger');
+const Branch = require("../models/branchModel");
+const { logAction } = require("../utils/auditLogger");
 
-// ✅ Create new branch
+// Create new branch
 exports.createBranch = async (req, res) => {
   try {
     const branch = new Branch(req.body);
@@ -11,9 +10,9 @@ exports.createBranch = async (req, res) => {
     await logAction({
       module: "Branch",
       action: "CREATE",
-      recordId: branch._id,
-      performedBy: req.user ? req.user._id : null,
-      details: req.body
+      entityId: branch._id,
+      performedBy: req.user?._id,
+      details: { branchCode: branch.branchCode, branchName: branch.branchName }
     });
 
     res.status(201).json(branch);
@@ -22,150 +21,24 @@ exports.createBranch = async (req, res) => {
   }
 };
 
-// ✅ Update existing branch
+// Update branch
 exports.updateBranch = async (req, res) => {
   try {
     const { id } = req.params;
-    const branch = await Branch.findByIdAndUpdate(id, req.body, { new: true });
+    const branch = await Branch.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    if (!branch) return res.status(404).json({ error: "Branch not found" });
 
-    if (!branch) return res.status(404).json({ error: 'Branch not found' });
+    branch.audit.modifiedBy = req.user?._id || "system";
+    branch.audit.modifiedDate = new Date();
+    await branch.save();
 
     await logAction({
       module: "Branch",
       action: "UPDATE",
-      recordId: id,
-      performedBy: req.user ? req.user._id : null,
+      entityId: id,
+      performedBy: req.user?._id,
       details: req.body
     });
-
-    res.json(branch);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
-// ✅ Assign user to a branch
-exports.assignUser = async (req, res) => {
-  try {
-    const { branchId, userId } = req.body;
-
-    const branch = await Branch.findByIdAndUpdate(
-      branchId,
-      { $addToSet: { assignedUsers: userId } },
-      { new: true }
-    ).populate('assignedUsers');
-
-    if (!branch) return res.status(404).json({ error: 'Branch not found' });
-
-    await logAction({
-      module: "Branch",
-      action: "ASSIGN_USER",
-      recordId: branchId,
-      performedBy: req.user ? req.user._id : null,
-      details: { assignedUserId: userId }
-    });
-
-    res.json(branch);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
-// ✅ Remove user from branch
-exports.removeUser = async (req, res) => {
-  try {
-    const { branchId, userId } = req.body;
-
-    const branch = await Branch.findByIdAndUpdate(
-      branchId,
-      { $pull: { assignedUsers: userId } },
-      { new: true }
-    ).populate('assignedUsers');
-
-    if (!branch) return res.status(404).json({ error: 'Branch not found' });
-
-    await logAction({
-      module: "Branch",
-      action: "REMOVE_USER",
-      recordId: branchId,
-      performedBy: req.user ? req.user._id : null,
-      details: { removedUserId: userId }
-    });
-
-    res.json(branch);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
-// ✅ Activate product for branch + initialize inventory
-exports.activateProduct = async (req, res) => {
-  try {
-    const { branchId, productId } = req.body;
-
-    const branch = await Branch.findByIdAndUpdate(
-      branchId,
-      { $addToSet: { activatedProducts: productId } },
-      { new: true }
-    ).populate('activatedProducts');
-
-    if (!branch) return res.status(404).json({ error: 'Branch not found' });
-
-    // Ensure inventory exists
-    const inventoryExists = await Inventory.findOne({ branch: branchId, product: productId });
-    if (!inventoryExists) {
-      await Inventory.create({ branch: branchId, product: productId, quantity: 0 });
-    }
-
-    await logAction({
-      module: "Branch",
-      action: "ACTIVATE_PRODUCT",
-      recordId: branchId,
-      performedBy: req.user ? req.user._id : null,
-      details: { activatedProductId: productId }
-    });
-
-    res.json(branch);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
-// ✅ Deactivate product for branch
-exports.deactivateProduct = async (req, res) => {
-  try {
-    const { branchId, productId } = req.body;
-
-    const branch = await Branch.findByIdAndUpdate(
-      branchId,
-      { $pull: { activatedProducts: productId } },
-      { new: true }
-    ).populate('activatedProducts');
-
-    if (!branch) return res.status(404).json({ error: 'Branch not found' });
-
-    await logAction({
-      module: "Branch",
-      action: "DEACTIVATE_PRODUCT",
-      recordId: branchId,
-      performedBy: req.user ? req.user._id : null,
-      details: { deactivatedProductId: productId }
-    });
-
-    res.json(branch);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
-// ✅ Get details of a branch by ID
-exports.getBranch = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const branch = await Branch.findById(id)
-      .populate('assignedUsers activatedProducts config.defaultEnabledProducts config.pricingOverrides.product');
-
-    if (!branch) return res.status(404).json({ error: 'Branch not found' });
 
     res.json(branch);
   } catch (err) {
@@ -173,84 +46,123 @@ exports.getBranch = async (req, res) => {
   }
 };
 
-// ✅ List all branches
-exports.listBranches = async (req, res) => {
+// Assign user to branch
+exports.assignUser = async (req, res) => {
   try {
-    const branches = await Branch.find()
-      .populate('assignedUsers activatedProducts')
-      .select('name type isActive location manager'); // optimized
+    const { id } = req.params;
+    const userAssignment = req.body; // { userId, role, startDate, endDate }
 
+    const branch = await Branch.findById(id);
+    if (!branch) return res.status(404).json({ error: "Branch not found" });
+
+    branch.userAssignments.push(userAssignment);
+    await branch.save();
+
+    await logAction({
+      module: "Branch",
+      action: "ASSIGN_USER",
+      entityId: id,
+      performedBy: req.user?._id,
+      details: userAssignment
+    });
+
+    res.json(branch);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Assign product to branch
+exports.assignProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const productAssignment = req.body; // { productId, priceOverride, discount, validUntil }
+
+    const branch = await Branch.findById(id);
+    if (!branch) return res.status(404).json({ error: "Branch not found" });
+
+    branch.productAssignments.push(productAssignment);
+    await branch.save();
+
+    await logAction({
+      module: "Branch",
+      action: "ASSIGN_PRODUCT",
+      entityId: id,
+      performedBy: req.user?._id,
+      details: productAssignment
+    });
+
+    res.json(branch);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Remove product assignment
+exports.removeProduct = async (req, res) => {
+  try {
+    const { id, productId } = req.params;
+
+    const branch = await Branch.findById(id);
+    if (!branch) return res.status(404).json({ error: "Branch not found" });
+
+    branch.productAssignments = branch.productAssignments.filter(
+      (p) => p.productId.toString() !== productId
+    );
+    await branch.save();
+
+    await logAction({
+      module: "Branch",
+      action: "REMOVE_PRODUCT",
+      entityId: id,
+      performedBy: req.user?._id,
+      details: { productId }
+    });
+
+    res.json(branch);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get all branches
+exports.getAllBranches = async (req, res) => {
+  try {
+    const branches = await Branch.find().sort({ createdAt: -1 });
     res.json(branches);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// ✅ Toggle branch active/inactive status
-exports.toggleBranchStatus = async (req, res) => {
+// Get single branch
+exports.getBranch = async (req, res) => {
   try {
     const { id } = req.params;
     const branch = await Branch.findById(id);
-
-    if (!branch) return res.status(404).json({ error: 'Branch not found' });
-
-    branch.isActive = !branch.isActive;
-    await branch.save();
-
-    await logAction({
-      module: "Branch",
-      action: branch.isActive ? "ACTIVATE" : "DEACTIVATE",
-      recordId: id,
-      performedBy: req.user ? req.user._id : null
-    });
-
-    res.json({ message: `Branch ${branch.isActive ? 'activated' : 'deactivated'}`, branch });
+    if (!branch) return res.status(404).json({ error: "Branch not found" });
+    res.json(branch);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// ✅ Branch-level dashboard
+// Dashboard stats
 exports.getBranchDashboard = async (req, res) => {
   try {
-    const { branchId } = req.params;
+    const totalBranches = await Branch.countDocuments();
+    const activeBranches = await Branch.countDocuments({ status: "Active" });
+    const inactiveBranches = await Branch.countDocuments({ status: "Inactive" });
 
-    const branch = await Branch.findById(branchId)
-      .populate("activatedProducts assignedUsers");
-
-    if (!branch) return res.status(404).json({ error: "Branch not found" });
-
-    // Inventory stats
-    const inventoryStats = await Inventory.aggregate([
-      { $match: { branch: branch._id } },
-      {
-        $group: {
-          _id: null,
-          totalProducts: { $sum: 1 },
-          lowStockItems: {
-            $sum: { $cond: [{ $lt: ["$quantity", 20] }, 1, 0] }
-          },
-          totalQuantity: { $sum: "$quantity" }
-        }
-      }
+    const employeesByBranch = await Branch.aggregate([
+      { $group: { _id: "$branchName", totalEmployees: { $sum: "$totalEmployees" } } }
     ]);
 
-    const stats = inventoryStats[0] || {
-      totalProducts: 0,
-      lowStockItems: 0,
-      totalQuantity: 0
-    };
-
     res.json({
-      branch: {
-        id: branch._id,
-        name: branch.name,
-        type: branch.type,
-        isActive: branch.isActive,
-        users: branch.assignedUsers.length,
-        products: branch.activatedProducts.length
-      },
-      inventory: stats
+      totalBranches,
+      activeBranches,
+      inactiveBranches,
+      employeesByBranch
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

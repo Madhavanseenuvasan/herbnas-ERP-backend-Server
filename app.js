@@ -1,11 +1,12 @@
 const express = require("express");
 require("dotenv").config();
 const dbConnection = require("./config/db");
-
+const cors = require('cors');
 dbConnection();
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 app.get("/", (req, res) => {
   res.send("ERP API is running 🚀");
