@@ -2,35 +2,29 @@ const mongoose = require('mongoose');
 
 // Batch sub-schema
 const BatchSchema = new mongoose.Schema({
-  batchNo: { type: String, required: true }, // User batch number
+  batchNo: { type: String, required: true }, 
   lotNo: { type: String },
   productionDate: { type: Date },
   expiryDate: { type: Date },
   location: { type: String },
-  quantityProduced: { type: Number, default: 0 }
+  quantityProduced: { type: Number, default: 0 },
+  totalBatchPrice: { type: Number, default: 0 }  // UI: Total Batch Price
 }, { _id: false });
 
-// Pricing tier sub-schema
-const PricingTierSchema = new mongoose.Schema({
-  price: { type: Number, required: true },
-  incentive: { type: Number, default: 0 },
-  incentiveType: { type: String, default: "-" }, // e.g. "Bonus", "-"
-  tax: { type: Number, default: 0 } // GST%
+// Pricing schema (per product)
+const PricingSchema = new mongoose.Schema({
+  price: { type: Number, required: true, default: 0 },          // Price (per piece)
+  incentive: { type: Number, default: 0 },                      // Incentive (per piece)
+  incentiveType: { type: String, default: "-" },                // Incentive Type
 }, { _id: false });
 
 const ProductSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  category: String,
-  sku: { type: String, required: true, unique: true },
-  supplier: String,
-  weight: Number,
-  description: String,
-  isActive: { type: Boolean, default: true },
-  batches: [BatchSchema],
-  basePrice: { type: Number, default: 0 },      // MRP/Unit Price
-  gst: { type: Number, default: 0 },            // GST %
-  stock: { type: Number, default: 0 },          // Stock (current total)
-  pricing: PricingTierSchema,                   // Latest price/incentive/GST
+  name: { type: String, required: true },                       // Product Name
+  sku: { type: String, required: true, unique: true },          // SKU
+  pricing: PricingSchema,                                       // Price + Incentives
+  batches: [BatchSchema],                                       // Batch details
+  stock: { type: Number, default: 0 },                          // Stock (UI column)
+  isActive: { type: Boolean, default: true },                   // Active/Inactive
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 

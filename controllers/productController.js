@@ -1,20 +1,17 @@
 const Product = require('../models/productModel');
 const { logAction } = require('../utils/auditLogger');
 
-// Add Product (full flow)
+// Add Product
 exports.addProduct = async (req, res) => {
   try {
-    // Assume UI gathers data in one POST
-    const {
-      name, category, sku, supplier, weight, description,
-      basePrice, gst, stock,
-      pricing, // { price, incentive, incentiveType, tax }
-      batches  // [{ batchNo, lotNo, productionDate, expiryDate, location, quantityProduced }]
-    } = req.body;
+    const { name, sku, pricing, stock, batches } = req.body;
 
     const product = new Product({
-      name, category, sku, supplier, weight, description,
-      basePrice, gst, stock, pricing, batches
+      name,
+      sku,
+      pricing,
+      stock,
+      batches
     });
 
     await product.save();
@@ -33,7 +30,7 @@ exports.addProduct = async (req, res) => {
   }
 };
 
-// Edit product (update all main product fields, except batches)
+// Edit Product
 exports.editProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -43,6 +40,7 @@ exports.editProduct = async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!product) return res.status(404).json({ error: "Product not found" });
+
     await logAction({
       module: 'Product',
       action: 'UPDATE',
@@ -50,51 +48,68 @@ exports.editProduct = async (req, res) => {
       performedBy: req.user?._id,
       details: req.body
     });
+
     res.json(product);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// Deactivate/activate
+// Activate / Deactivate
 exports.deactivateProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const product = await Product.findByIdAndUpdate(id, { isActive: false }, { new: true });
     if (!product) return res.status(404).json({ error: "Product not found" });
+
     await logAction({
-      module: 'Product', action: 'DEACTIVATE',
-      entityId: id, performedBy: req.user?._id
+      module: 'Product',
+      action: 'DEACTIVATE',
+      entityId: id,
+      performedBy: req.user?._id
     });
-    res.json(product);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-exports.activateProduct = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const product = await Product.findByIdAndUpdate(id, { isActive: true }, { new: true });
-    if (!product) return res.status(404).json({ error: "Product not found" });
-    await logAction({
-      module: 'Product', action: 'ACTIVATE',
-      entityId: id, performedBy: req.user?._id
-    });
+
     res.json(product);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// Add a new batch (append to product)
+exports.activateProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findByIdAndUpdate(id, { isActive: true }, { new: true });
+    if (!product) return res.status(404).json({ error: "Product not found" });
+
+    await logAction({
+      module: 'Product',
+      action: 'ACTIVATE',
+      entityId: id,
+      performedBy: req.user?._id
+    });
+
+    res.json(product);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Add Batch
 exports.addBatch = async (req, res) => {
   try {
     const { id } = req.params;
     const batchData = req.body;
+
     const product = await Product.findById(id);
     if (!product) return res.status(404).json({ error: "Product not found" });
+
     product.batches.push(batchData);
+
+    // Update stock when new batch is added
+    product.stock += batchData.quantityProduced || 0;
+
     await product.save();
+
     await logAction({
       module: 'Product',
       action: 'ADD_BATCH',
@@ -102,23 +117,25 @@ exports.addBatch = async (req, res) => {
       performedBy: req.user?._id,
       details: batchData
     });
+
     res.json(product);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// Get all products
+// Get All Products
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.find()
-      .select("name sku category supplier stock pricing isActive");
+      .select("name sku pricing stock batches.isActive");
     res.json(products);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
-// Get single product
+
+// Get Single Product
 exports.getProduct = async (req, res) => {
   try {
     const { id } = req.params;
