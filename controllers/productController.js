@@ -24,21 +24,31 @@ const calculatePricing = (product) => {
 };
 
 // ---------- Add Product ----------
+// Add Product
 exports.addProduct = async (req, res) => {
   try {
+    console.log("Incoming body:", req.body); // 🔍 log what frontend sends
+
     const product = new Product(req.body);
     await product.save();
-
-    await logAction({
-      module: "Product",
-      action: "CREATE",
-      entityId: product._id,
-      performedBy: req.user?._id,
-      details: req.body
-    });
+    
+  await logAction({
+    module: "Product",
+    action: "CREATE",
+    entityId: product._id,
+    performedBy: req.user?._id,
+    details: req.body
+  });
 
     res.status(201).json(product);
   } catch (err) {
+    console.error("Save error:", err); // 🔍 full error on server
+    if (err.name === "ValidationError") {
+      const errors = Object.keys(err.errors).map(
+        (key) => `${key}: ${err.errors[key].message}`
+      );
+      return res.status(400).json({ error: "Validation failed", details: errors });
+    }
     res.status(400).json({ error: err.message });
   }
 };
