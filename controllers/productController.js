@@ -1,7 +1,7 @@
 const Product = require("../models/productModel");
 const { logAction } = require("../utils/auditLogger");
 
-// ---------- Helper: GST & Incentive Pricing ----------
+// ---------- Helper: Pricing ----------
 const calculatePricing = (product) => {
   const gstAmount = (product.price * product.gst) / 100;
   const priceInclGST = product.price + gstAmount;
@@ -9,20 +9,17 @@ const calculatePricing = (product) => {
   let finalPrice = priceInclGST;
   if (product.incentiveType === "Discount") {
     finalPrice = priceInclGST - product.incentive;
-  } else if (product.incentiveType === "Bonus") {
-    finalPrice = priceInclGST; // Bonus is extra units, not price reduction
-  } else if (product.incentiveType === "Commission") {
-    finalPrice = priceInclGST; // Commission is handled separately
+  } else if (product.incentiveType === "Bonus" || product.incentiveType === "Commission") {
+    finalPrice = priceInclGST; // incentives applied later
   }
 
+  const totalBatchPrice = finalPrice * product.stockQuantity;
   const totalGST = gstAmount * product.stockQuantity;
-  const totalAmount = finalPrice * product.stockQuantity;
 
   return {
-    pricePerUnitInclGST: priceInclGST,
-    finalUnitPrice: finalPrice,
-    totalGST,
-    totalAmount
+    pricePerUnit: priceInclGST,
+    totalBatchPrice,
+    totalGST
   };
 };
 
@@ -117,7 +114,7 @@ exports.activateProduct = async (req, res) => {
   }
 };
 
-// ---------- Get All Products ----------
+// ---------- Get All Products (for UI table) ----------
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.find();
@@ -128,19 +125,11 @@ exports.getAllProducts = async (req, res) => {
         _id: p._id,
         name: p.name,
         sku: p.sku,
-        category: p.category,
-        supplier: p.supplier,
-        price: p.price,
-        gst: p.gst,
-        incentive: p.incentive,
-        incentiveType: p.incentiveType,
-        stockQuantity: p.stockQuantity,
-        batchNo: p.batchNo,
-        lotNo: p.lotNo,
-        manufactureDate: p.manufactureDate,
-        expiryDate: p.expiryDate,
-        location: p.location,
-        ...pricing,
+        price: pricing.pricePerUnit || 0,
+        totalBatchPrice: pricing.totalBatchPrice || 0,
+        incentive: p.incentive || 0,
+        incentiveType: p.incentiveType || "-",
+        stock: p.stockQuantity,
         isActive: p.isActive
       };
     });
@@ -183,7 +172,7 @@ exports.getDashboardStats = async (req, res) => {
 
     const stockValue = products.reduce((sum, p) => {
       const pricing = calculatePricing(p);
-      return sum + pricing.totalAmount;
+      return sum + pricing.totalBatchPrice;
     }, 0);
 
     res.json({
