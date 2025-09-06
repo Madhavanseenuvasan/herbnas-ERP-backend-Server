@@ -7,7 +7,7 @@ router.post('/', productController.addProduct);          // Create Product
 router.get('/', productController.getAllProducts);       // Get All Products
 
 // ---------- Dashboard / Stats ----------
-router.get('/stats/dashboard', productController.getDashboardStats); // ✅ place before :id
+router.get('/stats/dashboard', productController.getDashboardStats); // Place before :id
 
 // ---------- Single Product ----------
 router.get('/:id', productController.getProduct);        // Get Single Product

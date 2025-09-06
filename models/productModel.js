@@ -1,39 +1,46 @@
 const mongoose = require("mongoose");
 
-const ProductSchema = new mongoose.Schema(
-  {
-    // ---------- Step 1: Product Info ----------
-    name: { type: String, required: true },
-    sku: { type: String, required: true }, // removed unique
-    category: { type: String, required: true },
-    supplier: { type: String, required: true },
-    weight: { type: Number, required: false },
-    description: { type: String, required: false },
+// ---------- Step 1: Batch Schema ----------
+const BatchSchema = new mongoose.Schema({
+  batchNo: { type: String, required: true },
+  lotNo: { type: String, required: true },
+  productionDate: { type: Date, required: true },
+  expiryDate: { type: Date, required: true },
+  location: { type: String, required: false },
+  quantityProduced: { type: Number, default: 0 },
+  totalBatchPrice: { type: Number, default: 0 }
+}, { _id: false });
 
-    // ---------- Step 2: Batch Info ----------
-    batchNo: { type: String, required: true },
-    lotNo: { type: String, required: true },
-    manufactureDate: { type: Date, required: true },
-    expiryDate: { type: Date, required: true },
-    location: { type: String, required: false },
+// ---------- Step 2: Product Schema ----------
+const ProductSchema = new mongoose.Schema({
+  // Product Info
+  name: { type: String, required: true },
+  sku: { type: String, required: true },
+  category: { type: String, required: true },
+  supplier: { type: String, required: true },
+  weight: { type: Number, default: 0 },
+  description: { type: String, default: "" },
 
-    // ---------- Step 3: Pricing ----------
-    price: { type: Number, required: true }, // MRP / Unit Price
-    gst: { type: Number, default: 0 },       // GST %
-    stockQuantity: { type: Number, required: true },
+  // Batches
+  batches: { type: [BatchSchema], default: [] },
 
-    // Incentives
+  // Stock
+  stock: { type: Number, default: 0 },
+
+  // Pricing
+  pricing: {
+    price: { type: Number, default: 0 },
+    gst: { type: Number, default: 0 },
     incentive: { type: Number, default: 0 },
     incentiveType: { 
       type: String, 
-      enum: ["Discount", "Bonus", "Commission"], 
-      default: "Discount" 
-    },
-
-    // Status
-    isActive: { type: Boolean, default: true }
+      enum: ["-", "Discount", "Bonus", "Commission"], 
+      default: "-" 
+    }
   },
-  { timestamps: true }
-);
+
+  // Status
+  isActive: { type: Boolean, default: true }
+}, { timestamps: true });
 
 module.exports = mongoose.model("Product", ProductSchema);
