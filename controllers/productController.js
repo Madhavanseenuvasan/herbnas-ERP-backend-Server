@@ -1,12 +1,21 @@
-const Product = require('../models/productModel');
-const { logAction } = require('../utils/auditLogger');
+const Product = require("../models/productModel");
+const { logAction } = require("../utils/auditLogger");
 
 // Add Product
 exports.addProduct = async (req, res) => {
   try {
     const {
-      name, sku, category, supplier, weight, description,
-      stock, pricing, batches
+      name,
+      sku,
+      category,
+      supplier,
+      batchNumber,
+      expiryDate,
+      mrp,
+      gstPercent,
+      stockQuantity,
+      incentive,
+      incentiveType
     } = req.body;
 
     const product = new Product({
@@ -14,18 +23,20 @@ exports.addProduct = async (req, res) => {
       sku,
       category,
       supplier,
-      weight,
-      description,
-      stock,
-      pricing,
-      batches
+      batchNumber,
+      expiryDate,
+      mrp,
+      gstPercent,
+      stockQuantity,
+      incentive,
+      incentiveType
     });
 
     await product.save();
 
     await logAction({
-      module: 'Product',
-      action: 'CREATE',
+      module: "Product",
+      action: "CREATE",
       entityId: product._id,
       performedBy: req.user?._id,
       details: req.body
@@ -37,21 +48,19 @@ exports.addProduct = async (req, res) => {
   }
 };
 
-
 // Edit Product
 exports.editProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const product = await Product.findByIdAndUpdate(
-      id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const product = await Product.findByIdAndUpdate(id, req.body, {
+      new: true,
+      runValidators: true
+    });
     if (!product) return res.status(404).json({ error: "Product not found" });
 
     await logAction({
-      module: 'Product',
-      action: 'UPDATE',
+      module: "Product",
+      action: "UPDATE",
       entityId: id,
       performedBy: req.user?._id,
       details: req.body
@@ -67,12 +76,16 @@ exports.editProduct = async (req, res) => {
 exports.deactivateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const product = await Product.findByIdAndUpdate(id, { isActive: false }, { new: true });
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { isActive: false },
+      { new: true }
+    );
     if (!product) return res.status(404).json({ error: "Product not found" });
 
     await logAction({
-      module: 'Product',
-      action: 'DEACTIVATE',
+      module: "Product",
+      action: "DEACTIVATE",
       entityId: id,
       performedBy: req.user?._id
     });
@@ -86,12 +99,16 @@ exports.deactivateProduct = async (req, res) => {
 exports.activateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const product = await Product.findByIdAndUpdate(id, { isActive: true }, { new: true });
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { isActive: true },
+      { new: true }
+    );
     if (!product) return res.status(404).json({ error: "Product not found" });
 
     await logAction({
-      module: 'Product',
-      action: 'ACTIVATE',
+      module: "Product",
+      action: "ACTIVATE",
       entityId: id,
       performedBy: req.user?._id
     });
@@ -102,66 +119,32 @@ exports.activateProduct = async (req, res) => {
   }
 };
 
-// Add Batch
-exports.addBatch = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const batchData = req.body;
-
-    const product = await Product.findById(id);
-    if (!product) return res.status(404).json({ error: "Product not found" });
-
-    product.batches.push(batchData);
-
-    // Update stock when new batch is added
-    product.stock += batchData.quantityProduced || 0;
-
-    await product.save();
-
-    await logAction({
-      module: 'Product',
-      action: 'ADD_BATCH',
-      entityId: id,
-      performedBy: req.user?._id,
-      details: batchData
-    });
-
-    res.json(product);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// Get All Products (for table)
+// Get All Products
 exports.getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find().select("name sku pricing batches stock isActive");
+    const products = await Product.find();
 
-    // Map products to include total batch price from latest batch or sum
-    const formatted = products.map(p => {
-      const totalBatchPrice = p.batches.length > 0 
-        ? p.batches.reduce((sum, b) => sum + (b.totalBatchPrice || 0), 0)
-        : 0;
-
-      return {
-        _id: p._id,
-        name: p.name,
-        sku: p.sku,
-        price: p.pricing?.price || 0,
-        incentive: p.pricing?.incentive || 0,
-        incentiveType: p.pricing?.incentiveType || "-",
-        totalBatchPrice,
-        stock: p.stock,
-        isActive: p.isActive
-      };
-    });
+    const formatted = products.map((p) => ({
+      _id: p._id,
+      name: p.name,
+      sku: p.sku,
+      mrp: p.mrp,
+      gstPercent: p.gstPercent,
+      incentive: p.incentive,
+      incentiveType: p.incentiveType,
+      stockQuantity: p.stockQuantity,
+      pricePerUnitInclGST: p.pricePerUnitInclGST,
+      finalUnitPrice: p.finalUnitPrice,
+      totalGST: p.totalGST,
+      totalAmount: p.totalAmount,
+      isActive: p.isActive
+    }));
 
     res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
-
 
 // Get Single Product
 exports.getProduct = async (req, res) => {
@@ -180,29 +163,27 @@ exports.getDashboardStats = async (req, res) => {
   try {
     const products = await Product.find();
 
-    // Total products
     const totalProducts = products.length;
 
-    // Low stock items (stock <= 5 for example)
-    const lowStockItems = products.filter(p => p.stock <= 5).length;
+    const lowStockItems = products.filter((p) => p.stockQuantity <= 5).length;
 
-    // Expiring batches (expiry date within next 30 days)
     const now = new Date();
     const next30Days = new Date();
     next30Days.setDate(now.getDate() + 30);
-    const expiringBatches = products.reduce((count, product) => {
-      return count + product.batches.filter(b => b.expiryDate && b.expiryDate <= next30Days).length;
-    }, 0);
 
-    // Stock value (sum of all totalBatchPrice)
-    const stockValue = products.reduce((sum, product) => {
-      return sum + product.batches.reduce((s, b) => s + (b.totalBatchPrice || 0), 0);
-    }, 0);
+    const expiringProducts = products.filter(
+      (p) => p.expiryDate && p.expiryDate <= next30Days
+    ).length;
+
+    const stockValue = products.reduce(
+      (sum, p) => sum + (p.totalAmount || 0),
+      0
+    );
 
     res.json({
       totalProducts,
       lowStockItems,
-      expiringBatches,
+      expiringProducts,
       stockValue
     });
   } catch (err) {
@@ -219,8 +200,8 @@ exports.deleteProduct = async (req, res) => {
     if (!product) return res.status(404).json({ error: "Product not found" });
 
     await logAction({
-      module: 'Product',
-      action: 'DELETE',
+      module: "Product",
+      action: "DELETE",
       entityId: id,
       performedBy: req.user?._id
     });
