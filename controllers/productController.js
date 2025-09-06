@@ -29,6 +29,19 @@ const calculatePricing = (product) => {
 // ---------- Add Product ----------
 exports.addProduct = async (req, res) => {
   try {
+    // If batches not sent, create a default batch using stock
+    if (!req.body.batches || req.body.batches.length === 0) {
+      req.body.batches = [{
+        batchNo: `BATCH-${Date.now()}`,
+        lotNo: "DEFAULT",
+        productionDate: new Date(),
+        expiryDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
+        location: "Default",
+        quantityProduced: req.body.stock || 0,
+        totalBatchPrice: 0
+      }];
+    }
+
     const product = new Product(req.body);
     await product.save();
 
@@ -141,7 +154,7 @@ exports.getAllProducts = async (req, res) => {
         incentiveType: p.pricing?.incentiveType || "-",
         stock: p.stock,
         isActive: p.isActive,
-        batches: p.batches
+        batches: p.batches || []
       };
     });
 

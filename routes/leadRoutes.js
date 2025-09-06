@@ -3,20 +3,24 @@ const router = express.Router();
 const {
   createLead,
   getLeads,
+  getLeadById,
   updateLead,
-  deleteLead,
-  addFollowUp
+  deleteLead
 } = require('../controllers/leadController');
 
-router.route('/')
-  .post(createLead)
-  .get(getLeads);
+// Create a new lead
+router.post('/', createLead);
 
-router.route('/:id')
-  .put(updateLead)
-  .delete(deleteLead);
+//  Get all leads with filtering + pagination
+router.get('/', getLeads);
 
-router.route('/:id/follow-up')
-  .post(addFollowUp);
+// Get a single lead by ID
+router.get('/:id', getLeadById);
+
+//  Update a lead
+router.put('/:id', updateLead);
+
+// Delete a lead
+router.delete('/:id', deleteLead);
 
 module.exports = router;

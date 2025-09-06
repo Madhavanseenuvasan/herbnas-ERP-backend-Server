@@ -1,26 +1,33 @@
 const mongoose = require('mongoose');
 
-const followUpSchema = new mongoose.Schema({
-  date: Date,
-  notes: String,
-  contactedBy: String
-});
+// const followUpSchema = new mongoose.Schema({
+//   date: Date,
+//   notes: String,
+//   contactedBy: String
+// });
+
+//followUps: [followUpSchema],
 
 const leadSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: String,
-  phone: String,
-  source: { type: String, default: 'manual' },
-  status: {
-    type: String,
-    enum: ['new', 'contacted', 'qualified', 'converted', 'lost'],
-    default: 'new'
+  leadId: { type: String, unique: true },
+  contact: { type: String, required: true },
+  leadStatus: { type: String, enum: ['New', 'Dispatched', 'Order Completed', 'Qualified', 'Pending'], default: 'New' },
+  product: { type: String, required: true },
+  healthIssue: { type: String },
+  reminder: { type: Date },
+  age: { type: Number },
+  gender: { type: String, enum: ['Male', 'Female', 'Other'] },
+  maritalStatus: { type: String, enum: ['Single', 'Married', 'Divorced', 'Widowed'] },
+  dispatchedFrom: { type: String },
+  product: { type: String, required: true },
+  notes: { type: String }, // ✅ Add this line
+  address: {
+    city: String,
+    pinCode: String,
+    state: String,
+    country: String
   },
-  branch: String,
-  owner: String,
-  followUps: [followUpSchema],
-  performanceScore: { type: Number, default: 0 },
-  reminderDate: Date
+  completed: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Lead', leadSchema);
