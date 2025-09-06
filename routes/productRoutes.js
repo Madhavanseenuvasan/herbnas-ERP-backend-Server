@@ -10,5 +10,6 @@ router.patch('/:id/deactivate', productController.deactivateProduct);
 router.patch('/:id/activate', productController.activateProduct);
 router.post('/:id/batch', productController.addBatch);
 router.get('/stats/dashboard', productController.getDashboardStats);
+router.delete('/:id', productController.deleteProduct);
 
 module.exports = router;

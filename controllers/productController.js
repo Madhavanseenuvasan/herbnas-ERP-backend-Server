@@ -4,13 +4,20 @@ const { logAction } = require('../utils/auditLogger');
 // Add Product
 exports.addProduct = async (req, res) => {
   try {
-    const { name, sku, pricing, stock, batches } = req.body;
+    const {
+      name, sku, category, supplier, weight, description,
+      stock, pricing, batches
+    } = req.body;
 
     const product = new Product({
       name,
       sku,
-      pricing,
+      category,
+      supplier,
+      weight,
+      description,
       stock,
+      pricing,
       batches
     });
 
@@ -29,6 +36,7 @@ exports.addProduct = async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 };
+
 
 // Edit Product
 exports.editProduct = async (req, res) => {
