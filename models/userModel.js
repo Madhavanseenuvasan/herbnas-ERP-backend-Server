@@ -2,6 +2,13 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
+const counterSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true }, // e.g. "employeeId"
+  seq: { type: Number, default: 1000 } // start from emp1001
+});
+
+const Counter = mongoose.model('Counter', counterSchema);
+
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -25,12 +32,16 @@ const userSchema = new mongoose.Schema({
 
 userSchema.pre('save', async function (next) {
   if (!this.employeeId) {
-    const count = await mongoose.model('User').countDocuments();
-    this.employeeId = `emp${1001 + count}`;
+    const counter = await Counter.findOneAndUpdate(
+      { id: 'employeeId' },
+      { $inc: { seq: 1 } }, // atomically increment
+      { new: true, upsert: true } // create if doesn't exist
+    );
+
+    this.employeeId = `emp${counter.seq}`;
   }
   next();
 });
-
 
 
 userSchema.pre('save', async function (next) {
