@@ -1,49 +1,35 @@
 const mongoose = require("mongoose");
 
-const ProductSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  category: { type: String },
-  sku: { type: String, unique: true },
-  supplier: { type: String },
+const ProductSchema = new mongoose.Schema(
+  {
+    // ---------- Step 1: Product Info ----------
+    name: { type: String, required: true },
+    sku: { type: String, required: true, unique: true },
+    category: { type: String, required: true },
+    supplier: { type: String, required: true },
+    weight: { type: Number, required: false },
+    description: { type: String, required: false },
 
-  // Batch Info
-  batchNumber: { type: String },
-  expiryDate: { type: Date },
+    // ---------- Step 2: Batch Info ----------
+    batchNo: { type: String, required: true },
+    lotNo: { type: String, required: true },
+    manufactureDate: { type: Date, required: true },
+    expiryDate: { type: Date, required: true },
+    location: { type: String, required: false },
 
-  // Pricing Info
-  mrp: { type: Number, required: true }, // MRP / Unit Price
-  gstPercent: { type: Number, default: 0 }, // GST %
-  stockQuantity: { type: Number, default: 0 },
-  incentive: { type: Number, default: 0 }, // incentive per piece
-  incentiveType: {
-    type: String,
-    enum: ["Discount", "Cashback", "Freebie"],
-    default: "Discount"
+    // ---------- Step 3: Pricing ----------
+    price: { type: Number, required: true }, // MRP / Unit Price
+    gst: { type: Number, default: 0 },       // GST %
+    stockQuantity: { type: Number, required: true },
+
+    // Incentives
+    incentive: { type: Number, default: 0 },
+    incentiveType: { type: String, enum: ["Discount", "Cashback"], default: "Discount" },
+
+    // Status
+    isActive: { type: Boolean, default: true }
   },
-
-  // Auto tracking
-  isActive: { type: Boolean, default: true }
-}, { timestamps: true });
-
-// Virtual fields (not saved in DB)
-ProductSchema.virtual("pricePerUnitInclGST").get(function () {
-  return this.mrp + (this.mrp * this.gstPercent / 100);
-});
-
-ProductSchema.virtual("finalUnitPrice").get(function () {
-  let price = this.pricePerUnitInclGST;
-  if (this.incentiveType === "Discount") {
-    price -= this.incentive;
-  }
-  return price;
-});
-
-ProductSchema.virtual("totalGST").get(function () {
-  return (this.mrp * this.gstPercent / 100) * this.stockQuantity;
-});
-
-ProductSchema.virtual("totalAmount").get(function () {
-  return this.finalUnitPrice * this.stockQuantity;
-});
+  { timestamps: true }
+);
 
 module.exports = mongoose.model("Product", ProductSchema);

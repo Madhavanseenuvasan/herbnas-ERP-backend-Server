@@ -1,6 +1,29 @@
 const Product = require("../models/productModel");
 const { logAction } = require("../utils/auditLogger");
 
+// Helper to calculate GST & Incentives
+const calculatePricing = (product) => {
+  const gstAmount = (product.price * product.gst) / 100;
+  const priceInclGST = product.price + gstAmount;
+
+  let finalPrice = priceInclGST;
+  if (product.incentiveType === "Discount") {
+    finalPrice = priceInclGST - product.incentive;
+  } else if (product.incentiveType === "Cashback") {
+    finalPrice = priceInclGST; // Cashback applied later
+  }
+
+  const totalGST = gstAmount * product.stockQuantity;
+  const totalAmount = finalPrice * product.stockQuantity;
+
+  return {
+    pricePerUnitInclGST: priceInclGST,
+    finalUnitPrice: finalPrice,
+    totalGST,
+    totalAmount
+  };
+};
+
 // Add Product
 exports.addProduct = async (req, res) => {
   try {
@@ -9,10 +32,15 @@ exports.addProduct = async (req, res) => {
       sku,
       category,
       supplier,
-      batchNumber,
+      weight,
+      description,
+      batchNo,
+      lotNo,
+      manufactureDate,
       expiryDate,
-      mrp,
-      gstPercent,
+      location,
+      price,
+      gst,
       stockQuantity,
       incentive,
       incentiveType
@@ -23,10 +51,15 @@ exports.addProduct = async (req, res) => {
       sku,
       category,
       supplier,
-      batchNumber,
+      weight,
+      description,
+      batchNo,
+      lotNo,
+      manufactureDate,
       expiryDate,
-      mrp,
-      gstPercent,
+      location,
+      price,
+      gst,
       stockQuantity,
       incentive,
       incentiveType
@@ -124,21 +157,21 @@ exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.find();
 
-    const formatted = products.map((p) => ({
-      _id: p._id,
-      name: p.name,
-      sku: p.sku,
-      mrp: p.mrp,
-      gstPercent: p.gstPercent,
-      incentive: p.incentive,
-      incentiveType: p.incentiveType,
-      stockQuantity: p.stockQuantity,
-      pricePerUnitInclGST: p.pricePerUnitInclGST,
-      finalUnitPrice: p.finalUnitPrice,
-      totalGST: p.totalGST,
-      totalAmount: p.totalAmount,
-      isActive: p.isActive
-    }));
+    const formatted = products.map((p) => {
+      const pricing = calculatePricing(p);
+      return {
+        _id: p._id,
+        name: p.name,
+        sku: p.sku,
+        price: p.price,
+        gst: p.gst,
+        incentive: p.incentive,
+        incentiveType: p.incentiveType,
+        stockQuantity: p.stockQuantity,
+        ...pricing,
+        isActive: p.isActive
+      };
+    });
 
     res.json(formatted);
   } catch (err) {
@@ -152,7 +185,9 @@ exports.getProduct = async (req, res) => {
     const { id } = req.params;
     const product = await Product.findById(id);
     if (!product) return res.status(404).json({ error: "Product not found" });
-    res.json(product);
+
+    const pricing = calculatePricing(product);
+    res.json({ ...product.toObject(), ...pricing });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -164,7 +199,6 @@ exports.getDashboardStats = async (req, res) => {
     const products = await Product.find();
 
     const totalProducts = products.length;
-
     const lowStockItems = products.filter((p) => p.stockQuantity <= 5).length;
 
     const now = new Date();
@@ -175,10 +209,10 @@ exports.getDashboardStats = async (req, res) => {
       (p) => p.expiryDate && p.expiryDate <= next30Days
     ).length;
 
-    const stockValue = products.reduce(
-      (sum, p) => sum + (p.totalAmount || 0),
-      0
-    );
+    const stockValue = products.reduce((sum, p) => {
+      const pricing = calculatePricing(p);
+      return sum + pricing.totalAmount;
+    }, 0);
 
     res.json({
       totalProducts,
