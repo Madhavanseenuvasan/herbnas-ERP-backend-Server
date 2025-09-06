@@ -124,16 +124,36 @@ exports.addBatch = async (req, res) => {
   }
 };
 
-// Get All Products
+// Get All Products (for table)
 exports.getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find()
-      .select("name sku pricing stock batches.isActive");
-    res.json(products);
+    const products = await Product.find().select("name sku pricing batches stock isActive");
+
+    // Map products to include total batch price from latest batch or sum
+    const formatted = products.map(p => {
+      const totalBatchPrice = p.batches.length > 0 
+        ? p.batches.reduce((sum, b) => sum + (b.totalBatchPrice || 0), 0)
+        : 0;
+
+      return {
+        _id: p._id,
+        name: p.name,
+        sku: p.sku,
+        price: p.pricing?.price || 0,
+        incentive: p.pricing?.incentive || 0,
+        incentiveType: p.pricing?.incentiveType || "-",
+        totalBatchPrice,
+        stock: p.stock,
+        isActive: p.isActive
+      };
+    });
+
+    res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
 
 // Get Single Product
 exports.getProduct = async (req, res) => {
@@ -142,6 +162,41 @@ exports.getProduct = async (req, res) => {
     const product = await Product.findById(id);
     if (!product) return res.status(404).json({ error: "Product not found" });
     res.json(product);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Dashboard Stats
+exports.getDashboardStats = async (req, res) => {
+  try {
+    const products = await Product.find();
+
+    // Total products
+    const totalProducts = products.length;
+
+    // Low stock items (stock <= 5 for example)
+    const lowStockItems = products.filter(p => p.stock <= 5).length;
+
+    // Expiring batches (expiry date within next 30 days)
+    const now = new Date();
+    const next30Days = new Date();
+    next30Days.setDate(now.getDate() + 30);
+    const expiringBatches = products.reduce((count, product) => {
+      return count + product.batches.filter(b => b.expiryDate && b.expiryDate <= next30Days).length;
+    }, 0);
+
+    // Stock value (sum of all totalBatchPrice)
+    const stockValue = products.reduce((sum, product) => {
+      return sum + product.batches.reduce((s, b) => s + (b.totalBatchPrice || 0), 0);
+    }, 0);
+
+    res.json({
+      totalProducts,
+      lowStockItems,
+      expiringBatches,
+      stockValue
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
