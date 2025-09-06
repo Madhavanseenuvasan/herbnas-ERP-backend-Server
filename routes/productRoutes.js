@@ -2,13 +2,18 @@ const express = require('express');
 const router = express.Router();
 const productController = require('../controllers/productController');
 
-router.get('/', productController.getAllProducts);
-router.get('/stats/dashboard', productController.getDashboardStats); 
-router.get('/:id', productController.getProduct);
-router.post('/', productController.addProduct);
-router.put('/:id', productController.editProduct);
-router.patch('/:id/deactivate', productController.deactivateProduct);
-router.patch('/:id/activate', productController.activateProduct);
-router.delete('/:id', productController.deleteProduct);
+// ---------- Product CRUD ----------
+router.post('/', productController.addProduct);          // Create Product
+router.get('/', productController.getAllProducts);       // Get All Products
+router.get('/:id', productController.getProduct);        // Get Single Product
+router.put('/:id', productController.editProduct);       // Update Product
+router.delete('/:id', productController.deleteProduct);  // Delete Product
+
+// ---------- Status Updates ----------
+router.patch('/:id/activate', productController.activateProduct);    // Activate
+router.patch('/:id/deactivate', productController.deactivateProduct); // Deactivate
+
+// ---------- Dashboard / Stats ----------
+router.get('/stats/dashboard', productController.getDashboardStats);
 
 module.exports = router;

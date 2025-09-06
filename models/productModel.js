@@ -4,7 +4,7 @@ const ProductSchema = new mongoose.Schema(
   {
     // ---------- Step 1: Product Info ----------
     name: { type: String, required: true },
-    sku: { type: String, required: true, unique: true },
+    sku: { type: String, required: true }, // removed unique
     category: { type: String, required: true },
     supplier: { type: String, required: true },
     weight: { type: Number, required: false },
@@ -24,7 +24,11 @@ const ProductSchema = new mongoose.Schema(
 
     // Incentives
     incentive: { type: Number, default: 0 },
-    incentiveType: { type: String, enum: ["Discount", "Cashback"], default: "Discount" },
+    incentiveType: { 
+      type: String, 
+      enum: ["Discount", "Bonus", "Commission"], 
+      default: "Discount" 
+    },
 
     // Status
     isActive: { type: Boolean, default: true }

@@ -1,7 +1,7 @@
 const Product = require("../models/productModel");
 const { logAction } = require("../utils/auditLogger");
 
-// Helper to calculate GST & Incentives
+// ---------- Helper: GST & Incentive Pricing ----------
 const calculatePricing = (product) => {
   const gstAmount = (product.price * product.gst) / 100;
   const priceInclGST = product.price + gstAmount;
@@ -9,8 +9,10 @@ const calculatePricing = (product) => {
   let finalPrice = priceInclGST;
   if (product.incentiveType === "Discount") {
     finalPrice = priceInclGST - product.incentive;
-  } else if (product.incentiveType === "Cashback") {
-    finalPrice = priceInclGST; // Cashback applied later
+  } else if (product.incentiveType === "Bonus") {
+    finalPrice = priceInclGST; // Bonus is extra units, not price reduction
+  } else if (product.incentiveType === "Commission") {
+    finalPrice = priceInclGST; // Commission is handled separately
   }
 
   const totalGST = gstAmount * product.stockQuantity;
@@ -24,47 +26,10 @@ const calculatePricing = (product) => {
   };
 };
 
-// Add Product
+// ---------- Add Product ----------
 exports.addProduct = async (req, res) => {
   try {
-    const {
-      name,
-      sku,
-      category,
-      supplier,
-      weight,
-      description,
-      batchNo,
-      lotNo,
-      manufactureDate,
-      expiryDate,
-      location,
-      price,
-      gst,
-      stockQuantity,
-      incentive,
-      incentiveType
-    } = req.body;
-
-    const product = new Product({
-      name,
-      sku,
-      category,
-      supplier,
-      weight,
-      description,
-      batchNo,
-      lotNo,
-      manufactureDate,
-      expiryDate,
-      location,
-      price,
-      gst,
-      stockQuantity,
-      incentive,
-      incentiveType
-    });
-
+    const product = new Product(req.body);
     await product.save();
 
     await logAction({
@@ -81,7 +46,7 @@ exports.addProduct = async (req, res) => {
   }
 };
 
-// Edit Product
+// ---------- Edit Product ----------
 exports.editProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -105,7 +70,7 @@ exports.editProduct = async (req, res) => {
   }
 };
 
-// Activate / Deactivate
+// ---------- Activate / Deactivate ----------
 exports.deactivateProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -152,7 +117,7 @@ exports.activateProduct = async (req, res) => {
   }
 };
 
-// Get All Products
+// ---------- Get All Products ----------
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.find();
@@ -163,11 +128,18 @@ exports.getAllProducts = async (req, res) => {
         _id: p._id,
         name: p.name,
         sku: p.sku,
+        category: p.category,
+        supplier: p.supplier,
         price: p.price,
         gst: p.gst,
         incentive: p.incentive,
         incentiveType: p.incentiveType,
         stockQuantity: p.stockQuantity,
+        batchNo: p.batchNo,
+        lotNo: p.lotNo,
+        manufactureDate: p.manufactureDate,
+        expiryDate: p.expiryDate,
+        location: p.location,
         ...pricing,
         isActive: p.isActive
       };
@@ -179,7 +151,7 @@ exports.getAllProducts = async (req, res) => {
   }
 };
 
-// Get Single Product
+// ---------- Get Single Product ----------
 exports.getProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -193,7 +165,7 @@ exports.getProduct = async (req, res) => {
   }
 };
 
-// Dashboard Stats
+// ---------- Dashboard Stats ----------
 exports.getDashboardStats = async (req, res) => {
   try {
     const products = await Product.find();
@@ -225,7 +197,7 @@ exports.getDashboardStats = async (req, res) => {
   }
 };
 
-// Delete Product
+// ---------- Delete Product ----------
 exports.deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
