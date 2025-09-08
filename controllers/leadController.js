@@ -15,45 +15,8 @@ exports.createLead = async (req, res) => {
 // get leads with filtering and pagination
 exports.getLeads = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      leadStatus,
-      product,
-      gender,
-      fromDate,
-      toDate,
-      search
-    } = req.query;
-
-    const query = {};
-
-    // 🔎 Filtering
-    if (leadStatus) query.leadStatus = leadStatus;
-    if (product) query.product = product;
-    if (gender) query.gender = gender;
-    if (search) query.contact = { $regex: search, $options: 'i' };
-    if (fromDate && toDate) {
-      query.reminder = {
-        $gte: new Date(fromDate),
-        $lte: new Date(toDate)
-      };
-    }
-
-    // 📄 Pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const total = await Lead.countDocuments(query);
-    const leads = await Lead.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    res.json({
-      total,
-      page: parseInt(page),
-      pages: Math.ceil(total / limit),
-      leads
-    });
+    const leads = await Lead.find().sort({ createdAt: -1 }); // get all leads, latest first
+    res.json(leads);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
