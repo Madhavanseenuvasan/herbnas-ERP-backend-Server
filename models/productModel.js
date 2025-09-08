@@ -11,6 +11,18 @@ const BatchSchema = new mongoose.Schema({
   totalBatchPrice: { type: Number, default: 0 }
 }, { _id: false });
 
+// ---------- Pricing Tier Schema ----------
+const PricingSchema = new mongoose.Schema({
+  price: { type: Number, default: 0 },
+  gst: { type: Number, default: 0 },
+  incentive: { type: Number, default: 0 },
+  incentiveType: {
+    type: String,
+    enum: ["-", "Discount", "Bonus", "Commission"],
+    default: "-"
+  }
+}, { _id: false });
+
 // ---------- Product Schema ----------
 const ProductSchema = new mongoose.Schema({
   // Product Info
@@ -27,17 +39,8 @@ const ProductSchema = new mongoose.Schema({
   // Stock
   stock: { type: Number, default: 0 },
 
-  // Pricing
-  pricing: {
-    price: { type: Number, default: 0 },
-    gst: { type: Number, default: 0 },
-    incentive: { type: Number, default: 0 },
-    incentiveType: {
-      type: String,
-      enum: ["-", "Discount", "Bonus", "Commission"],
-      default: "-"
-    }
-  },
+  // Pricing as Array (the ONLY change)
+  pricing: { type: [PricingSchema], default: [] },
 
   // Status
   isActive: { type: Boolean, default: true }

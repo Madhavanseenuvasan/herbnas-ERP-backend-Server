@@ -1,12 +1,14 @@
 const Product = require("../models/productModel");
 const { logAction } = require("../utils/auditLogger");
 
-// ---------- Helper: Pricing Calculation ----------
-const calculatePricing = (input) => {
-  const price = Number(input.pricing?.price ?? input.price) || 0;
-  const gst = Number(input.pricing?.gst ?? input.gst) || 0;
-  const incentive = Number(input.pricing?.incentive ?? input.incentive) || 0;
-  const incentiveType = input.pricing?.incentiveType || input.incentiveType || "-";
+// ---------- Helper: Pricing Calculation (array version) ----------
+const calculatePricing = (input, tierIndex = 0) => {
+  const pricingArr = Array.isArray(input.pricing) ? input.pricing : [];
+  const pricing = pricingArr[tierIndex] || {};
+  const price = Number(pricing.price ?? 0);
+  const gst = Number(pricing.gst ?? 0);
+  const incentive = Number(pricing.incentive ?? 0);
+  const incentiveType = pricing.incentiveType || "-";
   const stock = Number(input.stock) || 0;
 
   const gstAmount = (price * gst) / 100;
@@ -25,7 +27,7 @@ const calculatePricing = (input) => {
     finalUnitPrice: finalPrice,
     totalGST,
     totalBatchPrice,
-    grandTotal: totalBatchPrice // Can enhance if other incentives needed
+    grandTotal: totalBatchPrice
   };
 };
 
@@ -145,8 +147,11 @@ exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.find();
 
+    // Show pricing-related info from the first tier only
     const formatted = products.map((p) => {
-      const pricing = calculatePricing(p);
+      const pricingArr = Array.isArray(p.pricing) ? p.pricing : [];
+      const tier = pricingArr[0] || {};
+      const calculated = calculatePricing(p);
       return {
         _id: p._id,
         name: p.name,
@@ -155,13 +160,14 @@ exports.getAllProducts = async (req, res) => {
         supplier: p.supplier,
         weight: p.weight,
         description: p.description,
-        price: pricing.pricePerUnit || 0,
-        incentive: p.pricing?.incentive || 0,
-        incentiveType: p.pricing?.incentiveType || "-",
+        pricing: pricingArr, // send all pricing tiers for UI
+        price: tier.price || 0,
+        incentive: tier.incentive || 0,
+        incentiveType: tier.incentiveType || "-",
         stock: p.stock,
         isActive: p.isActive,
-        totalBatchPrice: pricing.totalBatchPrice || 0,
-        totalGST: pricing.totalGST || 0,
+        totalBatchPrice: calculated.totalBatchPrice || 0,
+        totalGST: calculated.totalGST || 0,
         batches: p.batches || []
       };
     });
@@ -179,8 +185,25 @@ exports.getProduct = async (req, res) => {
     const product = await Product.findById(id);
     if (!product) return res.status(404).json({ error: "Product not found" });
 
-    const pricing = calculatePricing(product);
-    res.json({ ...product.toObject(), ...pricing });
+    const tier = Array.isArray(product.pricing) ? product.pricing[0] || {} : {};
+    const calculated = calculatePricing(product);
+    res.json({
+      _id: product._id,
+      name: product.name,
+      sku: product.sku,
+      category: product.category,
+      supplier: product.supplier,
+      weight: product.weight,
+      description: product.description,
+      price: tier.price || 0,
+      incentive: tier.incentive || 0,
+      incentiveType: tier.incentiveType || "-",
+      stock: product.stock,
+      isActive: product.isActive,
+      totalBatchPrice: calculated.totalBatchPrice || 0,
+      totalGST: calculated.totalGST || 0,
+      batches: product.batches || []
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -189,6 +212,8 @@ exports.getProduct = async (req, res) => {
 // ---------- Price Calculation API (for UI live calculation) ----------
 exports.calculatePricing = (req, res) => {
   try {
+    // Expects body: { pricing: [ { ... } ], stock: ... }
+    // Uses first tier by default, or you can add index param
     const pricing = calculatePricing(req.body);
     res.json(pricing);
   } catch (err) {
@@ -215,8 +240,8 @@ exports.getDashboardStats = async (req, res) => {
     ).length;
 
     const stockValue = products.reduce((sum, p) => {
-      const pricing = calculatePricing(p);
-      return sum + pricing.totalBatchPrice;
+      const calculated = calculatePricing(p);
+      return sum + calculated.totalBatchPrice;
     }, 0);
 
     res.json({
