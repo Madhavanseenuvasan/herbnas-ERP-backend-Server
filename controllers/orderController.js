@@ -1,19 +1,43 @@
 const Order = require("../models/orderModel");
 const Product = require("../models/productModel");
 
-// ---------- Helper: calculate totals including incentives ----------
+// ---------- Helper: calculate totals ----------
 const calculateTotals = (items) => {
   let subtotal = 0, gstAmount = 0;
   for (const p of items) {
     let finalPrice = p.price;
     if (p.incentiveType === "Discount") finalPrice -= p.incentive;
-    // Bonus or Commission could be added separately if needed
-
     subtotal += finalPrice * p.qty;
     gstAmount += (finalPrice * p.qty) * (p.gst / 100);
   }
   const grandTotal = subtotal + gstAmount;
   return { subtotal, gstAmount, grandTotal };
+};
+
+// ---------- Helper: format order for frontend ----------
+const formatOrderResponse = (order) => {
+  const formattedDate = new Date(order.orderDate).toISOString().split("T")[0];
+  const formattedTime = new Date(order.orderDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  return {
+    orderId: order.orderId,
+    staffName: order.staffName,
+    customerName: order.customerName,
+    incentive: order.staffIncentive || 0,
+    deliveryPartner: order.deliveryPartner,
+    paymentMode: order.paymentMode,
+    branch: order.branch,
+    expectedDeliveryDate: order.expectedDeliveryDate,
+    orderDate: formattedDate,
+    orderTime: formattedTime,
+    status: order.status,
+    products: order.products,
+    subtotal: order.subtotal,
+    totalGST: order.gstAmount,
+    totalAmount: order.grandTotal,
+    itemsCount: order.products.length,
+    totalItems: order.products.reduce((sum, p) => sum + p.qty, 0)
+  };
 };
 
 // ---------- Generate Incremental OrderId ----------
@@ -42,14 +66,13 @@ exports.createOrder = async (req, res) => {
     for (const item of products) {
       const product = await Product.findById(item.productId);
       if (!product) return res.status(404).json({ error: `Product not found: ${item.productId}` });
-
-      if (product.stock < item.qty) return res.status(400).json({ error: `Insufficient stock for product ${product.name}` });
+      if (product.stock < item.qty) return res.status(400).json({ error: `Insufficient stock for ${product.name}` });
 
       // Deduct stock
       product.stock -= item.qty;
       await product.save();
 
-      const { price, gst, incentive, incentiveType } = product.pricing;
+      const { price, gst, incentive, incentiveType } = product.pricing[0] || {};
 
       orderItems.push({
         productId: product._id,
@@ -81,13 +104,13 @@ exports.createOrder = async (req, res) => {
     });
 
     await order.save();
-    res.status(201).json({ message: "Order created successfully", order });
+    res.status(201).json({ message: "Order created successfully", order: formatOrderResponse(order) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 };
 
-// ---------- Update Order (with stock adjustment) ----------
+// ---------- Update Order ----------
 exports.updateOrder = async (req, res) => {
   try {
     const { id } = req.params;
@@ -96,8 +119,9 @@ exports.updateOrder = async (req, res) => {
     const order = await Order.findById(id);
     if (!order) return res.status(404).json({ error: "Order not found" });
 
-    // If products updated, restore old stock
+    // If products updated
     if (products && products.length > 0) {
+      // Restore old stock
       for (const oldItem of order.products) {
         const prod = await Product.findById(oldItem.productId);
         if (prod) {
@@ -111,12 +135,12 @@ exports.updateOrder = async (req, res) => {
       for (const item of products) {
         const product = await Product.findById(item.productId);
         if (!product) return res.status(404).json({ error: `Product not found: ${item.productId}` });
-        if (product.stock < item.qty) return res.status(400).json({ error: `Insufficient stock for product ${product.name}` });
+        if (product.stock < item.qty) return res.status(400).json({ error: `Insufficient stock for ${product.name}` });
 
         product.stock -= item.qty;
         await product.save();
 
-        const { price, gst, incentive, incentiveType } = product.pricing;
+        const { price, gst, incentive, incentiveType } = product.pricing[0] || {};
         newOrderItems.push({ productId: product._id, name: product.name, qty: item.qty, price, gst, incentive, incentiveType });
       }
 
@@ -130,7 +154,7 @@ exports.updateOrder = async (req, res) => {
     Object.assign(order, rest);
     await order.save();
 
-    res.json({ message: "Order updated successfully", order });
+    res.json({ message: "Order updated successfully", order: formatOrderResponse(order) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -157,12 +181,11 @@ exports.processReturn = async (req, res) => {
     order.returns.push({ reason });
     await order.save();
 
-    res.json({ message: "Return processed successfully", order });
+    res.json({ message: "Return processed successfully", order: formatOrderResponse(order) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 };
-
 
 // ---------- Update only status/payment ----------
 exports.updateOrderStatus = async (req, res) => {
@@ -177,7 +200,7 @@ exports.updateOrderStatus = async (req, res) => {
     if (paymentStatus) order.paymentStatus = paymentStatus;
 
     await order.save();
-    res.json({ message: "Order status updated successfully", order });
+    res.json({ message: "Order status updated successfully", order: formatOrderResponse(order) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -188,7 +211,7 @@ exports.getOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ error: "Order not found" });
-    res.json(order);
+    res.json(formatOrderResponse(order));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -203,11 +226,12 @@ exports.listOrders = async (req, res) => {
     if (status) query.status = status;
 
     const orders = await Order.find(query);
-    res.json(orders);
+    res.json(orders.map(formatOrderResponse));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
 // ---------- Delete Order ----------
 exports.deleteOrder = async (req, res) => {
   try {
@@ -215,7 +239,7 @@ exports.deleteOrder = async (req, res) => {
     const order = await Order.findById(id);
     if (!order) return res.status(404).json({ error: "Order not found" });
 
-    // Restore stock for all products in this order
+    // Restore stock
     for (const item of order.products) {
       const product = await Product.findById(item.productId);
       if (product) {
