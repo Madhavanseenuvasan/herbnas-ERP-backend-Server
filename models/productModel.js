@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-// ---------- Step 1: Batch Schema ----------
+// ---------- Batch Schema ----------
 const BatchSchema = new mongoose.Schema({
   batchNo: { type: String, required: true },
   lotNo: { type: String, required: true },
@@ -11,7 +11,7 @@ const BatchSchema = new mongoose.Schema({
   totalBatchPrice: { type: Number, default: 0 }
 }, { _id: false });
 
-// ---------- Step 2: Product Schema ----------
+// ---------- Product Schema ----------
 const ProductSchema = new mongoose.Schema({
   // Product Info
   name: { type: String, required: true },
@@ -32,10 +32,10 @@ const ProductSchema = new mongoose.Schema({
     price: { type: Number, default: 0 },
     gst: { type: Number, default: 0 },
     incentive: { type: Number, default: 0 },
-    incentiveType: { 
-      type: String, 
-      enum: ["-", "Discount", "Bonus", "Commission"], 
-      default: "-" 
+    incentiveType: {
+      type: String,
+      enum: ["-", "Discount", "Bonus", "Commission"],
+      default: "-"
     }
   },
 

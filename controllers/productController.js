@@ -1,12 +1,13 @@
 const Product = require("../models/productModel");
 const { logAction } = require("../utils/auditLogger");
 
-// ---------- Helper: Pricing ----------
-const calculatePricing = (product) => {
-  const price = product.pricing?.price || 0;
-  const gst = product.pricing?.gst || 0;
-  const incentive = product.pricing?.incentive || 0;
-  const incentiveType = product.pricing?.incentiveType || "-";
+// ---------- Helper: Pricing Calculation ----------
+const calculatePricing = (input) => {
+  const price = Number(input.pricing?.price ?? input.price) || 0;
+  const gst = Number(input.pricing?.gst ?? input.gst) || 0;
+  const incentive = Number(input.pricing?.incentive ?? input.incentive) || 0;
+  const incentiveType = input.pricing?.incentiveType || input.incentiveType || "-";
+  const stock = Number(input.stock) || 0;
 
   const gstAmount = (price * gst) / 100;
   const priceInclGST = price + gstAmount;
@@ -16,13 +17,15 @@ const calculatePricing = (product) => {
     finalPrice = priceInclGST - incentive;
   }
 
-  const totalBatchPrice = finalPrice * (product.stock || 0);
-  const totalGST = gstAmount * (product.stock || 0);
+  const totalBatchPrice = finalPrice * stock;
+  const totalGST = gstAmount * stock;
 
   return {
     pricePerUnit: priceInclGST,
+    finalUnitPrice: finalPrice,
+    totalGST,
     totalBatchPrice,
-    totalGST
+    grandTotal: totalBatchPrice // Can enhance if other incentives needed
   };
 };
 
@@ -148,12 +151,17 @@ exports.getAllProducts = async (req, res) => {
         _id: p._id,
         name: p.name,
         sku: p.sku,
+        category: p.category,
+        supplier: p.supplier,
+        weight: p.weight,
+        description: p.description,
         price: pricing.pricePerUnit || 0,
-        totalBatchPrice: pricing.totalBatchPrice || 0,
         incentive: p.pricing?.incentive || 0,
         incentiveType: p.pricing?.incentiveType || "-",
         stock: p.stock,
         isActive: p.isActive,
+        totalBatchPrice: pricing.totalBatchPrice || 0,
+        totalGST: pricing.totalGST || 0,
         batches: p.batches || []
       };
     });
@@ -178,6 +186,16 @@ exports.getProduct = async (req, res) => {
   }
 };
 
+// ---------- Price Calculation API (for UI live calculation) ----------
+exports.calculatePricing = (req, res) => {
+  try {
+    const pricing = calculatePricing(req.body);
+    res.json(pricing);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
 // ---------- Dashboard Stats ----------
 exports.getDashboardStats = async (req, res) => {
   try {
@@ -191,8 +209,8 @@ exports.getDashboardStats = async (req, res) => {
     next30Days.setDate(now.getDate() + 30);
 
     const expiringProducts = products.filter((p) =>
-      p.batches.some(
-        (b) => b.expiryDate && b.expiryDate <= next30Days
+      (p.batches || []).some(
+        (b) => b.expiryDate && new Date(b.expiryDate) <= next30Days
       )
     ).length;
 

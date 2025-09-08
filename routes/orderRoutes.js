@@ -2,16 +2,26 @@ const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/orderController');
 
-// Create new order
+// ---------- Order CRUD ----------
+
+// Create a new order
 router.post('/', orderController.createOrder);
 
-// Update order status
-router.put('/:id/status', orderController.updateOrderStatus);
+// Get all orders (optionally filtered by branch/status)
+router.get('/', orderController.listOrders);
 
-// Get single order
+// Get a single order by ID
 router.get('/:id', orderController.getOrder);
 
-// List all orders
-router.get('/', orderController.listOrders);
+// Update full order (customer, products, totals, etc.)
+router.put('/:id', orderController.updateOrder);
+
+// Update only order status or payment status
+router.patch('/:id/status', orderController.updateOrder);
+
+// Process a return for an order
+router.post('/:id/return', orderController.processReturn);
+
+router.delete('/:id', orderController.deleteOrder);
 
 module.exports = router;

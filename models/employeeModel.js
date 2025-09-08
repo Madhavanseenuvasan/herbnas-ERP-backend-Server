@@ -4,6 +4,7 @@ const employeeSchema = new mongoose.Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   employeeId: { type: String, unique: true },
+  branch: { type: String, unique: true },
   gender: { type: String, enum: ["Male", "Female", "Other"], required: true },
   address: { type: String },
   mobile: { type: String, required: true },
