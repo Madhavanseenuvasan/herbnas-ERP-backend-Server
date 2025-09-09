@@ -1,10 +1,17 @@
 const Branch = require("../models/branchModel");
 const { logAction } = require("../utils/auditLogger");
 
-// Create new branch
+// -------------------- Create Branch --------------------
 exports.createBranch = async (req, res) => {
   try {
-    const branch = new Branch(req.body);
+    const branch = new Branch({
+      ...req.body,
+      audit: {
+        createdBy: req.user?._id?.toString() || "system",
+        createdDate: new Date(),
+      },
+    });
+
     await branch.save();
 
     await logAction({
@@ -12,7 +19,7 @@ exports.createBranch = async (req, res) => {
       action: "CREATE",
       entityId: branch._id,
       performedBy: req.user?._id,
-      details: { branchCode: branch.branchCode, branchName: branch.branchName }
+      details: { branchCode: branch.branchCode, branchName: branch.branchName },
     });
 
     res.status(201).json(branch);
@@ -21,14 +28,21 @@ exports.createBranch = async (req, res) => {
   }
 };
 
-// Update branch
+// -------------------- Update Branch --------------------
 exports.updateBranch = async (req, res) => {
   try {
     const { id } = req.params;
-    const branch = await Branch.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    const branch = await Branch.findById(id);
     if (!branch) return res.status(404).json({ error: "Branch not found" });
 
-    branch.audit.modifiedBy = req.user?._id || "system";
+    // Partial update
+    Object.keys(req.body).forEach((key) => {
+      if (req.body[key] !== undefined) {
+        branch[key] = req.body[key];
+      }
+    });
+
+    branch.audit.modifiedBy = req.user?._id?.toString() || "system";
     branch.audit.modifiedDate = new Date();
     await branch.save();
 
@@ -37,7 +51,7 @@ exports.updateBranch = async (req, res) => {
       action: "UPDATE",
       entityId: id,
       performedBy: req.user?._id,
-      details: req.body
+      details: req.body,
     });
 
     res.json(branch);
@@ -46,16 +60,20 @@ exports.updateBranch = async (req, res) => {
   }
 };
 
-// Assign user to branch
+// -------------------- Assign User --------------------
 exports.assignUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const userAssignment = req.body; // { userId, role, startDate, endDate }
+    const { userId, role, startDate, endDate } = req.body;
+
+    if (!userId || !role) {
+      return res.status(400).json({ error: "userId and role are required" });
+    }
 
     const branch = await Branch.findById(id);
     if (!branch) return res.status(404).json({ error: "Branch not found" });
 
-    branch.userAssignments.push(userAssignment);
+    branch.userAssignments.push({ userId, role, startDate, endDate });
     await branch.save();
 
     await logAction({
@@ -63,7 +81,7 @@ exports.assignUser = async (req, res) => {
       action: "ASSIGN_USER",
       entityId: id,
       performedBy: req.user?._id,
-      details: userAssignment
+      details: req.body,
     });
 
     res.json(branch);
@@ -72,16 +90,27 @@ exports.assignUser = async (req, res) => {
   }
 };
 
-// Assign product to branch
+// -------------------- Assign Product --------------------
 exports.assignProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const productAssignment = req.body; // { productId, priceOverride, discount, validUntil }
+    const { productId, priceOverride, discount, effectiveFrom, effectiveTo } = req.body;
+
+    if (!productId) {
+      return res.status(400).json({ error: "productId is required" });
+    }
 
     const branch = await Branch.findById(id);
     if (!branch) return res.status(404).json({ error: "Branch not found" });
 
-    branch.productAssignments.push(productAssignment);
+    branch.productAssignments.push({
+      productId,
+      priceOverride,
+      discount,
+      effectiveFrom,
+      effectiveTo
+    });
+
     await branch.save();
 
     await logAction({
@@ -89,7 +118,7 @@ exports.assignProduct = async (req, res) => {
       action: "ASSIGN_PRODUCT",
       entityId: id,
       performedBy: req.user?._id,
-      details: productAssignment
+      details: req.body,
     });
 
     res.json(branch);
@@ -98,7 +127,7 @@ exports.assignProduct = async (req, res) => {
   }
 };
 
-// Remove product assignment
+// -------------------- Remove Product --------------------
 exports.removeProduct = async (req, res) => {
   try {
     const { id, productId } = req.params;
@@ -107,8 +136,9 @@ exports.removeProduct = async (req, res) => {
     if (!branch) return res.status(404).json({ error: "Branch not found" });
 
     branch.productAssignments = branch.productAssignments.filter(
-      (p) => p.productId.toString() !== productId
+      (p) => p.productId !== productId
     );
+
     await branch.save();
 
     await logAction({
@@ -116,7 +146,7 @@ exports.removeProduct = async (req, res) => {
       action: "REMOVE_PRODUCT",
       entityId: id,
       performedBy: req.user?._id,
-      details: { productId }
+      details: { productId },
     });
 
     res.json(branch);
@@ -125,7 +155,34 @@ exports.removeProduct = async (req, res) => {
   }
 };
 
-// Get all branches
+// -------------------- Delete Branch (Soft Delete) --------------------
+exports.deleteBranch = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const branch = await Branch.findById(id);
+    if (!branch) return res.status(404).json({ error: "Branch not found" });
+
+    branch.status = "INACTIVE";
+    branch.audit.modifiedBy = req.user?._id?.toString() || "system";
+    branch.audit.modifiedDate = new Date();
+    await branch.save();
+
+    await logAction({
+      module: "Branch",
+      action: "DELETE",
+      entityId: id,
+      performedBy: req.user?._id,
+      details: { branchCode: branch.branchCode, branchName: branch.branchName },
+    });
+
+    res.json({ message: "Branch marked as Inactive successfully", branch });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// -------------------- Get All Branches --------------------
 exports.getAllBranches = async (req, res) => {
   try {
     const branches = await Branch.find().sort({ createdAt: -1 });
@@ -135,7 +192,7 @@ exports.getAllBranches = async (req, res) => {
   }
 };
 
-// Get single branch
+// -------------------- Get Single Branch --------------------
 exports.getBranch = async (req, res) => {
   try {
     const { id } = req.params;
@@ -147,22 +204,28 @@ exports.getBranch = async (req, res) => {
   }
 };
 
-// Dashboard stats
+// -------------------- Branch Dashboard --------------------
 exports.getBranchDashboard = async (req, res) => {
   try {
     const totalBranches = await Branch.countDocuments();
-    const activeBranches = await Branch.countDocuments({ status: "Active" });
-    const inactiveBranches = await Branch.countDocuments({ status: "Inactive" });
+    const activeBranches = await Branch.countDocuments({ status: "ACTIVE" });
+    const inactiveBranches = await Branch.countDocuments({ status: "INACTIVE" });
 
     const employeesByBranch = await Branch.aggregate([
-      { $group: { _id: "$branchName", totalEmployees: { $sum: "$totalEmployees" } } }
+      {
+        $group: {
+          _id: "$_id",
+          branchName: { $first: "$branchName" },
+          totalEmployees: { $sum: "$totalEmployees" },
+        },
+      },
     ]);
 
     res.json({
       totalBranches,
       activeBranches,
       inactiveBranches,
-      employeesByBranch
+      employeesByBranch,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

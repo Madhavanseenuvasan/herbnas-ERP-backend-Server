@@ -1,96 +1,21 @@
-const { Location, Transaction } = require('../models/inventoryModel');
-const productModel = require('../models/productModel'); // ensure this file exists
-
-// -------------------- Product Controllers --------------------
-
-// Get all products with filters + pagination
-exports.getAllItems = async (req, res) => {
-  try {
-    const { search, category, brand, minStock, maxStock, page = 1, limit = 10 } = req.query;
-    let filter = {};
-
-    if (search) filter.name = { $regex: search, $options: 'i' };
-    if (category) filter.category = category;
-    if (brand) filter.brand = brand;
-
-    if (minStock || maxStock) {
-      filter["stock.current"] = {};
-      if (minStock) filter["stock.current"].$gte = Number(minStock);
-      if (maxStock) filter["stock.current"].$lte = Number(maxStock);
-    }
-
-    const LIMIT = Math.max(1, parseInt(limit) || 10);
-    const items = await productModel.find(filter)
-      .skip((page - 1) * LIMIT)
-      .limit(LIMIT)
-      .sort({ createdAt: -1 });
-
-    const total = await productModel.countDocuments(filter);
-
-    res.status(200).json({
-      total,
-      page: Number(page),
-      pages: Math.ceil(total / LIMIT),
-      items
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// Get single product by ID
-exports.getSingleItem = async (req, res) => {
-  try {
-    const item = await productModel.findById(req.params.id);
-    if (!item) return res.status(404).json({ error: "Item not found" });
-    res.status(200).json({ item });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// Create new product
-exports.createItem = async (req, res) => {
-  try {
-    const item = await productModel.create(req.body);
-    res.status(201).json({ item });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
-// Update product
-exports.updateItem = async (req, res) => {
-  try {
-    const item = await productModel.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!item) return res.status(404).json({ error: "Item not found" });
-    res.status(200).json({ message: 'Item updated successfully', item });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
-// Delete product
-exports.deleteItem = async (req, res) => {
-  try {
-    const item = await productModel.findByIdAndDelete(req.params.id);
-    if (!item) return res.status(404).json({ error: "Item not found" });
-    res.status(200).json({ message: 'Item deleted successfully', item });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+const { Inventory, InventoryTransaction, Location } = require("../models/inventoryModel");
 
 // -------------------- Stock Management --------------------
 
-// Get stock by product ID
+// Get stock by product & location
 exports.getStockByItemId = async (req, res) => {
   try {
-    const item = await productModel.findById(req.params.itemId);
-    if (!item) return res.status(404).json({ error: "Item not found" });
+    const { productId, locationId } = req.params;
+    const inventory = await Inventory.findOne({ product: productId, location: locationId })
+      .populate("product")
+      .populate("location");
+
+    if (!inventory) return res.status(404).json({ error: "No stock found for this product/location" });
+
     res.status(200).json({
-      name: item.name,
-      stock: item.stock
+      product: inventory.product.name,
+      location: inventory.location.name,
+      stock: inventory.stock,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -100,61 +25,154 @@ exports.getStockByItemId = async (req, res) => {
 // Adjust stock (inward, outward, adjustment, issue)
 exports.adjustStock = async (req, res) => {
   try {
-    const { itemId, type, quantity, reference, reason, location, room, rack, user } = req.body;
+    const { productId, type, quantity, reference, reason, locationId, user } = req.body;
 
-    if (!itemId || !type || typeof quantity !== 'number') {
-      return res.status(400).json({ error: 'Missing or invalid fields' });
+    if (!productId || !type || typeof quantity !== "number" || !locationId) {
+      return res.status(400).json({ error: "Missing or invalid fields" });
     }
 
-    const item = await productModel.findById(itemId);
-    if (!item) return res.status(404).json({ error: 'Item not found' });
-
-    const prevQty = item.stock.current;
-
-    if (type === 'inward') {
-      item.stock.available += quantity;
-      item.stock.current += quantity;
-    } else if (type === 'outward') {
-      if (item.stock.current < quantity) {
-        return res.status(400).json({ error: 'Insufficient stock' });
-      }
-      item.stock.available -= quantity;
-      item.stock.current -= quantity;
-    } else if (type === 'adjustment') {
-      item.stock.current = quantity;
-      item.stock.available = quantity; // ✅ fix: keep available in sync
-    } else if (type === 'issue') {
-      if (item.stock.current < quantity) {
-        return res.status(400).json({ error: 'Insufficient stock for issue' });
-      }
-      item.stock.available -= quantity;
-      item.stock.current -= quantity;
+    let inventory = await Inventory.findOne({ product: productId, location: locationId });
+    if (!inventory) {
+      inventory = await Inventory.create({
+        product: productId,
+        location: locationId,
+        stock: { current: 0, available: 0, reserved: 0 },
+      });
     }
 
-    await item.save();
+    if (type.toUpperCase() === "INWARD") {
+      inventory.stock.current += quantity;
+      inventory.stock.available += quantity;
+    } else if (["OUTWARD", "ISSUE"].includes(type.toUpperCase())) {
+      if (inventory.stock.available < quantity) {
+        return res.status(400).json({ error: "Insufficient stock" });
+      }
+      inventory.stock.current -= quantity;
+      inventory.stock.available -= quantity;
+    } else if (type.toUpperCase() === "ADJUSTMENT") {
+      inventory.stock.current = quantity;
+      inventory.stock.available = quantity;
+    }
 
-    await Transaction.create({
-      productId: item._id,
-      type,
-      previousQty: prevQty,
-      change: quantity,
-      resultQty: item.stock.current,
+    await inventory.save();
+
+    await InventoryTransaction.create({
+      product: productId,
+      location: locationId,
+      type: type.toUpperCase(),
+      quantity,
       reference,
-      reason,
-      location,
-      room,
-      rack,
+      notes: reason,
       user,
-      date: new Date()
     });
 
     res.status(200).json({
-      message: 'Stock adjusted successfully',
-      name: item.name,
-      stock: item.stock
+      message: "Stock adjusted successfully",
+      stock: inventory.stock,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+// -------------------- Reservation Flow --------------------
+
+// Internal function
+const reserveStockInternal = async (productId, locationId, qty, reference, user) => {
+  const inventory = await Inventory.findOne({ product: productId, location: locationId });
+  if (!inventory) throw new Error("Inventory record not found");
+  if (inventory.stock.available < qty) throw new Error("Insufficient stock");
+
+  inventory.stock.available -= qty;
+  inventory.stock.reserved += qty;
+  await inventory.save();
+
+  await InventoryTransaction.create({
+    product: productId,
+    location: locationId,
+    type: "RESERVE",
+    quantity: qty,
+    reference,
+    user,
+  });
+
+  return inventory;
+};
+
+// API wrapper
+exports.reserveStock = async (req, res) => {
+  try {
+    const { productId, locationId, qty, reference, user } = req.body;
+    const inventory = await reserveStockInternal(productId, locationId, qty, reference, user);
+    res.status(200).json({ message: "Stock reserved", stock: inventory.stock });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// Internal function
+const releaseStockInternal = async (productId, locationId, qty, reference, user) => {
+  const inventory = await Inventory.findOne({ product: productId, location: locationId });
+  if (!inventory) throw new Error("Inventory record not found");
+
+  inventory.stock.reserved -= qty;
+  inventory.stock.available += qty;
+  await inventory.save();
+
+  await InventoryTransaction.create({
+    product: productId,
+    location: locationId,
+    type: "RELEASE",
+    quantity: qty,
+    reference,
+    user,
+  });
+
+  return inventory;
+};
+
+// API wrapper
+exports.releaseStock = async (req, res) => {
+  try {
+    const { productId, locationId, qty, reference, user } = req.body;
+    const inventory = await releaseStockInternal(productId, locationId, qty, reference, user);
+    res.status(200).json({ message: "Stock released", stock: inventory.stock });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// Internal function
+const deductStockInternal = async (productId, locationId, qty, reference, user) => {
+  const inventory = await Inventory.findOne({ product: productId, location: locationId });
+  if (!inventory) throw new Error("Inventory record not found");
+
+  if (inventory.stock.reserved < qty) throw new Error("Not enough reserved stock");
+
+  inventory.stock.reserved -= qty;
+  inventory.stock.current -= qty;
+  await inventory.save();
+
+  await InventoryTransaction.create({
+    product: productId,
+    location: locationId,
+    type: "OUT",
+    quantity: qty,
+    reference,
+    user,
+  });
+
+  return inventory;
+};
+
+// API wrapper
+exports.deductStock = async (req, res) => {
+  try {
+    const { productId, locationId, qty, reference, user } = req.body;
+    const inventory = await deductStockInternal(productId, locationId, qty, reference, user);
+    res.status(200).json({ message: "Stock deducted", stock: inventory.stock });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 };
 
