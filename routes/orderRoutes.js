@@ -10,18 +10,19 @@ router.post('/', orderController.createOrder);
 // Get all orders (optionally filtered by branch/status)
 router.get('/', orderController.listOrders);
 
-// Get a single order by ID
-router.get('/:id', orderController.getOrder);
+// Get a single order by orderId
+router.get('/:orderId', orderController.getOrder);
 
-// Update full order (customer, products, totals, etc.)
-router.put('/:id', orderController.updateOrder);
+// Update full order (customer, products, totals, etc.) by orderId
+router.put('/:orderId', orderController.updateOrder);
 
-// Update only order status or payment status
-router.patch('/:id/status', orderController.updateOrder);
+// Update only order status or payment status by orderId
+router.patch('/:orderId/status', orderController.updateOrderStatus);
 
-// Process a return for an order
-router.post('/:id/return', orderController.processReturn);
+// Process a return for an order by orderId
+router.post('/:orderId/return', orderController.processReturn);
 
-router.delete('/:id', orderController.deleteOrder);
+// Delete order by orderId
+router.delete('/:orderId', orderController.deleteOrder);
 
 module.exports = router;
