@@ -23,6 +23,8 @@ const formatOrderResponse = (order) => {
     orderId: order.orderId,
     staffName: order.staffName,
     customerName: order.customerName,
+    phoneNumber: order.phoneNumber,    // ✅ added
+    address: order.address,            // ✅ added
     incentive: order.staffIncentive || 0,
     deliveryPartner: order.deliveryPartner,
     paymentMode: order.paymentMode,
@@ -55,8 +57,9 @@ const generateOrderId = async () => {
 // ---------- Create Order ----------
 exports.createOrder = async (req, res) => {
   try {
-    const { customerName, staffName, staffIncentive, branch, deliveryPartner,
-            expectedDeliveryDate, products, paymentMode, status } = req.body;
+    const { customerName, phoneNumber, address, staffName, staffIncentive,
+      branch, deliveryPartner, expectedDeliveryDate, products,
+      paymentMode, status } = req.body;
 
     if (!products || products.length === 0) {
       return res.status(400).json({ error: "Order must have at least one product" });
@@ -90,6 +93,8 @@ exports.createOrder = async (req, res) => {
     const order = new Order({
       orderId: await generateOrderId(),
       customerName,
+      phoneNumber,   // ✅ included
+      address,       // ✅ included
       staffName,
       staffIncentive,
       branch,
@@ -118,13 +123,11 @@ exports.updateOrder = async (req, res) => {
 
     const { products, ...rest } = req.body;
 
-    // find by orderId
     const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: "Order not found" });
 
     // If products updated -> handle stock adjustments
     if (Array.isArray(products) && products.length > 0) {
-      // Restore stock for previous items
       for (const oldItem of order.products) {
         const prod = await Product.findById(oldItem.productId);
         if (prod) {
@@ -133,7 +136,6 @@ exports.updateOrder = async (req, res) => {
         }
       }
 
-      // Deduct stock for new items and prepare new order items
       const newOrderItems = [];
       for (const item of products) {
         const product = await Product.findById(item.productId);
@@ -167,7 +169,7 @@ exports.updateOrder = async (req, res) => {
     delete rest.createdAt;
     delete rest._id;
 
-    // Apply other partial updates
+    // Apply other partial updates (✅ will update phoneNumber & address if passed)
     Object.keys(rest).forEach(key => {
       if (rest[key] !== undefined) order[key] = rest[key];
     });
