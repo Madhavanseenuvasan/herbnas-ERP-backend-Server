@@ -163,24 +163,30 @@ exports.deleteBranch = async (req, res) => {
     const branch = await Branch.findById(id);
     if (!branch) return res.status(404).json({ error: "Branch not found" });
 
-    branch.status = "INACTIVE";
-    branch.audit.modifiedBy = req.user?._id?.toString() || "system";
-    branch.audit.modifiedDate = new Date();
-    await branch.save();
+    // Capture details before deletion for logging
+    const branchDetails = {
+      branchCode: branch.branchCode,
+      branchName: branch.branchName,
+    };
 
+    // Hard delete
+    await Branch.findByIdAndDelete(id);
+
+    // Audit logging
     await logAction({
       module: "Branch",
       action: "DELETE",
       entityId: id,
       performedBy: req.user?._id,
-      details: { branchCode: branch.branchCode, branchName: branch.branchName },
+      details: branchDetails,
     });
 
-    res.json({ message: "Branch marked as Inactive successfully", branch });
+    res.json({ message: "Branch deleted permanently", branch: branchDetails });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
 
 // -------------------- Get All Branches --------------------
 exports.getAllBranches = async (req, res) => {

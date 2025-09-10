@@ -1,5 +1,6 @@
 const Order = require("../models/orderModel");
 const Product = require("../models/productModel");
+const { Inventory, InventoryTransaction } = require("../models/inventoryModel");
 
 // ---------- Helper: calculate totals ----------
 const calculateTotals = (items) => {
@@ -18,13 +19,12 @@ const calculateTotals = (items) => {
 const formatOrderResponse = (order) => {
   const formattedDate = order.orderDate ? new Date(order.orderDate).toISOString().split("T")[0] : null;
   const formattedTime = order.orderDate ? new Date(order.orderDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
-
   return {
     orderId: order.orderId,
     staffName: order.staffName,
     customerName: order.customerName,
-    phoneNumber: order.phoneNumber,    // ✅ added
-    address: order.address,            // ✅ added
+    phoneNumber: order.phoneNumber,
+    address: order.address,
     incentive: order.staffIncentive || 0,
     deliveryPartner: order.deliveryPartner,
     paymentMode: order.paymentMode,
@@ -60,21 +60,33 @@ exports.createOrder = async (req, res) => {
     const { customerName, phoneNumber, address, staffName, staffIncentive,
       branch, deliveryPartner, expectedDeliveryDate, products,
       paymentMode, status } = req.body;
-
     if (!products || products.length === 0) {
       return res.status(400).json({ error: "Order must have at least one product" });
     }
-
     const orderItems = [];
-
     for (const item of products) {
       const product = await Product.findById(item.productId);
       if (!product) return res.status(404).json({ error: `Product not found: ${item.productId}` });
-      if ((product.stock || 0) < (item.qty || 0)) return res.status(400).json({ error: `Insufficient stock for ${product.name}` });
 
-      // Deduct stock
-      product.stock -= item.qty;
-      await product.save();
+      // Query Inventory for the product at this branch/location
+      const inventory = await Inventory.findOne({ product: product._id, location: branch });
+      if (!inventory || inventory.stock.available < item.qty) {
+        return res.status(400).json({ error: `Insufficient stock for ${product.name} at branch` });
+      }
+      // Deduct stock using inventory logic
+      inventory.stock.available -= item.qty;
+      inventory.stock.current -= item.qty;
+      await inventory.save();
+
+      await InventoryTransaction.create({
+        product: product._id,
+        location: branch,
+        type: "OUTWARD",
+        quantity: item.qty,
+        reference: "Order creation",
+        notes: `Order ${item.productId}`,
+        user: staffName
+      });
 
       const { price, gst, incentive, incentiveType } = product.pricing?.[0] || {};
       orderItems.push({
@@ -87,14 +99,12 @@ exports.createOrder = async (req, res) => {
         incentiveType: incentiveType || "-"
       });
     }
-
     const { subtotal, gstAmount, grandTotal } = calculateTotals(orderItems);
-
     const order = new Order({
       orderId: await generateOrderId(),
       customerName,
-      phoneNumber,   // ✅ included
-      address,       // ✅ included
+      phoneNumber,
+      address,
       staffName,
       staffIncentive,
       branch,
@@ -107,7 +117,6 @@ exports.createOrder = async (req, res) => {
       paymentMode,
       status
     });
-
     await order.save();
     res.status(201).json({ message: "Order created successfully", order: formatOrderResponse(order) });
   } catch (err) {
@@ -120,31 +129,50 @@ exports.updateOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
     if (!orderId) return res.status(400).json({ error: "orderId is required in params" });
-
     const { products, ...rest } = req.body;
-
     const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: "Order not found" });
 
-    // If products updated -> handle stock adjustments
+    // If products updated -> handle stock adjustments via Inventory
     if (Array.isArray(products) && products.length > 0) {
+      // Restore stock for previous order items
       for (const oldItem of order.products) {
-        const prod = await Product.findById(oldItem.productId);
-        if (prod) {
-          prod.stock = (prod.stock || 0) + (oldItem.qty || 0);
-          await prod.save();
+        const inventory = await Inventory.findOne({ product: oldItem.productId, location: order.branch });
+        if (inventory) {
+          inventory.stock.available += oldItem.qty;
+          inventory.stock.current += oldItem.qty;
+          await inventory.save();
+          await InventoryTransaction.create({
+            product: oldItem.productId,
+            location: order.branch,
+            type: "INWARD",
+            quantity: oldItem.qty,
+            reference: "Order update revert",
+            notes: `Restore old qty from update on order ${orderId}`,
+            user: order.staffName
+          });
         }
       }
-
       const newOrderItems = [];
       for (const item of products) {
         const product = await Product.findById(item.productId);
         if (!product) return res.status(404).json({ error: `Product not found: ${item.productId}` });
-        if ((product.stock || 0) < (item.qty || 0)) return res.status(400).json({ error: `Insufficient stock for ${product.name}` });
-
-        product.stock -= item.qty;
-        await product.save();
-
+        const inventory = await Inventory.findOne({ product: product._id, location: order.branch });
+        if (!inventory || inventory.stock.available < item.qty) {
+          return res.status(400).json({ error: `Insufficient stock for ${product.name} at branch` });
+        }
+        inventory.stock.available -= item.qty;
+        inventory.stock.current -= item.qty;
+        await inventory.save();
+        await InventoryTransaction.create({
+          product: product._id,
+          location: order.branch,
+          type: "OUTWARD",
+          quantity: item.qty,
+          reference: "Order update deduct",
+          notes: `Order ${orderId} update`,
+          user: rest.staffName || order.staffName
+        });
         const { price, gst, incentive, incentiveType } = product.pricing?.[0] || {};
         newOrderItems.push({
           productId: product._id,
@@ -156,24 +184,18 @@ exports.updateOrder = async (req, res) => {
           incentiveType: incentiveType || "-"
         });
       }
-
       order.products = newOrderItems;
       const totals = calculateTotals(newOrderItems);
       order.subtotal = totals.subtotal;
       order.gstAmount = totals.gstAmount;
       order.grandTotal = totals.grandTotal;
     }
-
-    // Prevent changing orderId and createdAt via update
     delete rest.orderId;
     delete rest.createdAt;
     delete rest._id;
-
-    // Apply other partial updates (✅ will update phoneNumber & address if passed)
     Object.keys(rest).forEach(key => {
       if (rest[key] !== undefined) order[key] = rest[key];
     });
-
     await order.save();
     res.json({ message: "Order updated successfully", order: formatOrderResponse(order) });
   } catch (err) {
@@ -186,56 +208,71 @@ exports.processReturn = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { reason } = req.body;
-
     if (!orderId) return res.status(400).json({ error: "orderId is required in params" });
-
     const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: "Order not found" });
 
-    // Restore stock for all items (current behavior restores full order quantity)
+    // Restore stock via Inventory
     for (const item of order.products) {
-      const product = await Product.findById(item.productId);
-      if (product) {
-        product.stock = (product.stock || 0) + (item.qty || 0);
-        await product.save();
+      const inventory = await Inventory.findOne({ product: item.productId, location: order.branch });
+      if (inventory) {
+        inventory.stock.available += item.qty;
+        inventory.stock.current += item.qty;
+        await inventory.save();
+        await InventoryTransaction.create({
+          product: item.productId,
+          location: order.branch,
+          type: "INWARD",
+          quantity: item.qty,
+          reference: "Order return",
+          notes: `Order return ${orderId}`,
+          user: order.staffName
+        });
       }
     }
-
     order.status = "Returned";
     order.returns = order.returns || [];
     order.returns.push({ reason, date: new Date() });
     await order.save();
-
     res.json({ message: "Return processed successfully", order: formatOrderResponse(order) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 };
 
-// ---------- Update only status/payment (keeps both id and orderId support) ----------
-exports.updateOrderStatus = async (req, res) => {
+// ---------- Delete Order (by orderId) ----------
+exports.deleteOrder = async (req, res) => {
   try {
-    const { id, orderId } = req.params;
-    const { status, paymentStatus } = req.body;
-
-    let order;
-    if (orderId) order = await Order.findOne({ orderId });
-    else if (id) order = await Order.findById(id);
-    else return res.status(400).json({ error: "id or orderId is required in params" });
-
+    const { orderId } = req.params;
+    if (!orderId) return res.status(400).json({ error: "orderId is required in params" });
+    const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: "Order not found" });
-
-    if (status) order.status = status;
-    if (paymentStatus) order.paymentStatus = paymentStatus;
-
-    await order.save();
-    res.json({ message: "Order status updated successfully", order: formatOrderResponse(order) });
+    // Restore stock for all items
+    for (const item of order.products) {
+      const inventory = await Inventory.findOne({ product: item.productId, location: order.branch });
+      if (inventory) {
+        inventory.stock.available += item.qty;
+        inventory.stock.current += item.qty;
+        await inventory.save();
+        await InventoryTransaction.create({
+          product: item.productId,
+          location: order.branch,
+          type: "INWARD",
+          quantity: item.qty,
+          reference: "Order deleted",
+          notes: `Order delete restore ${orderId}`,
+          user: order.staffName
+        });
+      }
+    }
+    await Order.deleteOne({ orderId });
+    res.json({ message: "Order deleted successfully" });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// ---------- Get single order (supports orderId param) ----------
+// ---------- Get single order (orderId or id param) ----------
 exports.getOrder = async (req, res) => {
   try {
     const { id, orderId } = req.params;
@@ -243,7 +280,6 @@ exports.getOrder = async (req, res) => {
     if (orderId) order = await Order.findOne({ orderId });
     else if (id) order = await Order.findById(id);
     else return res.status(400).json({ error: "id or orderId required in params" });
-
     if (!order) return res.status(404).json({ error: "Order not found" });
     res.json(formatOrderResponse(order));
   } catch (err) {
@@ -258,7 +294,6 @@ exports.listOrders = async (req, res) => {
     const query = {};
     if (branch) query.branch = branch;
     if (status) query.status = status;
-
     const orders = await Order.find(query);
     res.json(orders.map(formatOrderResponse));
   } catch (err) {
@@ -266,27 +301,21 @@ exports.listOrders = async (req, res) => {
   }
 };
 
-// ---------- Delete Order (by orderId) ----------
-exports.deleteOrder = async (req, res) => {
+// ---------- Update only status/payment ----------
+exports.updateOrderStatus = async (req, res) => {
   try {
-    const { orderId } = req.params;
-    if (!orderId) return res.status(400).json({ error: "orderId is required in params" });
-
-    const order = await Order.findOne({ orderId });
+    const { id, orderId } = req.params;
+    const { status, paymentStatus } = req.body;
+    let order;
+    if (orderId) order = await Order.findOne({ orderId });
+    else if (id) order = await Order.findById(id);
+    else return res.status(400).json({ error: "id or orderId is required in params" });
     if (!order) return res.status(404).json({ error: "Order not found" });
-
-    // Restore stock for items
-    for (const item of order.products) {
-      const product = await Product.findById(item.productId);
-      if (product) {
-        product.stock = (product.stock || 0) + (item.qty || 0);
-        await product.save();
-      }
-    }
-
-    await Order.deleteOne({ orderId });
-    res.json({ message: "Order deleted successfully" });
+    if (status) order.status = status;
+    if (paymentStatus) order.paymentStatus = paymentStatus;
+    await order.save();
+    res.json({ message: "Order status updated successfully", order: formatOrderResponse(order) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 };
