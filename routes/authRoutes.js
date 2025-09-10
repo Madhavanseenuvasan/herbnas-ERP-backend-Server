@@ -3,7 +3,7 @@ const router = express.Router();
 
 const { authenticate } = require('../middleware/authMiddleware');
 const { authorizeRoles } = require('../middleware/roleMiddleware');
-const { register, login, getUsers, updateUser, forgotPassword, resetPassword, deactivateUser, updateRole, deleteUser, getUserByName, toggleWebAccess } = require('../controllers/authController');
+const { register, login, getUsers, updateUser, forgotPassword, resetPassword, deactivateUser, updateRole, deleteUser, getUserByName, toggleWebAccess, superAdminSetPassword } = require('../controllers/authController');
 
 //  Authentication
 router.route("/register").post(register);
@@ -24,9 +24,14 @@ router.route("/:id/deactivate")
   .put(authenticate, authorizeRoles("super_admin"), deactivateUser);
 
 
-router.route('/forgot-password').post(forgotPassword);
+// router.route('/forgot-password').post(forgotPassword);
 
-router.route('/reset-password/:token').post(resetPassword);
+// router.route('/reset-password/:token').post(resetPassword);
+
+
+router.route('/reset-password/:userId')
+  .put(authenticate,authorizeRoles("super_admin"), superAdminSetPassword)
+
 
 router.route('/:id')
   .delete(authenticate, authorizeRoles("super_admin"), deleteUser);

@@ -9,6 +9,7 @@ const counterSchema = new mongoose.Schema({
 
 const Counter = mongoose.model('Counter', counterSchema);
 
+
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -40,15 +41,18 @@ userSchema.pre('save', async function (next) {
 
     this.employeeId = `emp${counter.seq}`;
   }
+  if (this.isModified('password')) {
+    this.password = await bcrypt.hash(this.password, 12);
+  }
   next();
 });
 
 
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, 12);
-  next();
-});
+// userSchema.pre('save', async function (next) {
+//   if (!this.isModified('password')) return next();
+//   this.password = await bcrypt.hash(this.password, 12);
+//   next();
+// });
 
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);

@@ -18,7 +18,7 @@ const OrderItemSchema = new mongoose.Schema({
 const OrderSchema = new mongoose.Schema({
   orderId: { type: String, required: true, unique: true },
   customerName: { type: String, required: true },
-  phoneNumber:Number,
+  phoneNumber:String,
   address:String,
   staffName: { type: String },
   staffIncentive: { type: Number, default: 0 },

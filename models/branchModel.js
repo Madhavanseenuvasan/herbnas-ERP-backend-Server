@@ -21,7 +21,7 @@ const ProductAssignmentSchema = new mongoose.Schema({
 const BranchSchema = new mongoose.Schema({
   branchCode: { type: String, unique: true },  // auto-generated BR001, BR002...
   branchName: { type: String, required: true, trim: true }, // required, but NOT unique
-  type: { type: String, enum: ["SALES", "MANUFACTURING"], required: true },
+  type: { type: String, enum: ["SALES", "Service"], required: true },
   status: { type: String, enum: ["DRAFT", "ACTIVE", "INACTIVE"], default: "DRAFT" },
   managerName: String,
   parentCompany: String,
