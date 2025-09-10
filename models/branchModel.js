@@ -14,20 +14,20 @@ const ProductAssignmentSchema = new mongoose.Schema({
   priceOverride: Number,
   discount: Number,
   effectiveFrom: Date,
-  effectiveTo: Date                     // 🔑 added as requested
+  effectiveTo: Date
 }, { _id: false });
 
 // -------- Branch Schema --------
 const BranchSchema = new mongoose.Schema({
   branchCode: { type: String, unique: true },  // auto-generated BR001, BR002...
-  branchName: { type: String, required: true },
+  branchName: { type: String, required: true, trim: true }, // required, but NOT unique
   type: { type: String, enum: ["SALES", "MANUFACTURING"], required: true },
   status: { type: String, enum: ["DRAFT", "ACTIVE", "INACTIVE"], default: "DRAFT" },
   managerName: String,
   parentCompany: String,
   totalEmployees: { type: Number, default: 0 },
 
-  // Location + Contact merged (as frontend expects)
+  // Location + Contact merged
   location: {
     address1: String,
     address2: String,
