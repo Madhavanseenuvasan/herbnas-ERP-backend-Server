@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const healthIssueController = require('../controllers/healthIssuecontroller');
+const healthIssueController = require('../controllers/healthIssueController');
 
 router.post('/health-issues', healthIssueController.createHealthIssue);
 router.get('/health-issues', healthIssueController.getAllHealthIssues);
