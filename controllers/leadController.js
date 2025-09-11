@@ -43,7 +43,7 @@
 // };
 
 const Lead = require('../models/leadModel');
-const HealthIssue = require('../models/healthIssueModel'); // ✅ import HealthIssue model
+const HealthIssue = require('../models/healthIssuemodel'); // ✅ import HealthIssue model
 
 // helper function to map string → ObjectId
 async function mapHealthIssue(reqBody) {
