@@ -21,6 +21,6 @@ app.use("/api/branch", require("./routes/branchRoutes"));
 app.use("/api/inventory", require("./routes/inventoryRoutes"));
 app.use("/api/order", require("./routes/orderRoutes"));
 app.use("/api/audit", require("./routes/auditlogRoutes"));
-app.use('/api',require('./routes/healthIssue.routes'));
+app.use('/api',require('./routes/healthIssueroutes'));
 
 module.exports = app;
