@@ -41,11 +41,49 @@ exports.createLead = async (req, res) => {
 // Get Leads
 exports.getLeads = async (req, res) => {
   try {
-    const leads = await Lead.find()
-      .sort({ createdAt: -1 })
-      .populate('healthIssue', 'healthIssue gender maritalStatus fromAge toAge');
+    let { page = 1, limit = 10, leadStatus, product, gender, fromDate, toDate, search } = req.query;
 
-    res.json(leads);
+    page = parseInt(page, 10);
+    limit = parseInt(limit, 10);
+
+    const query = {};
+
+    // 🔎 Filtering conditions
+    if (leadStatus) query.leadStatus = leadStatus;
+    if (product) query.product = product;
+    if (gender) query.gender = gender;
+
+    // 🔎 Date range filter
+    if (fromDate && toDate) {
+      query.createdAt = { $gte: new Date(fromDate), $lte: new Date(toDate) };
+    }
+
+    // 🔎 Search by name, email, or contact
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { contact: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    // 🔹 Fetch leads with filters + pagination
+    const leads = await Lead.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    // 🔹 Count total leads
+    const total = await Lead.countDocuments(query);
+
+    res.json({
+      success: true,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      count: leads.length,
+      data: leads
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
