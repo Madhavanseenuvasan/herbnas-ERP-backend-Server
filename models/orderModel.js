@@ -9,7 +9,7 @@ const OrderItemSchema = new mongoose.Schema({
   productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   name: { type: String, required: true },
   qty: { type: Number, required: true },
-  price: { type: Number, required: true }, // price per unit (after incentives if applicable)
+  price: { type: Number, required: true }, // after incentive if applicable
   gst: { type: Number, default: 0 },
   incentive: { type: Number, default: 0 },
   incentiveType: { type: String, default: "-" } // Discount / Bonus / Commission
@@ -18,11 +18,11 @@ const OrderItemSchema = new mongoose.Schema({
 const OrderSchema = new mongoose.Schema({
   orderId: { type: String, required: true, unique: true },
   customerName: { type: String, required: true },
-  phoneNumber:String,
-  address:String,
+  phoneNumber: String,
+  address: String,
   staffName: { type: String },
   staffIncentive: { type: Number, default: 0 },
-  branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+  branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Location', required: true }, // ✅ fixed ref
   deliveryPartner: { type: String },
 
   expectedDeliveryDate: { type: Date },
