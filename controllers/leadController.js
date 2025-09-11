@@ -1,5 +1,5 @@
 const Lead = require('../models/leadModel');
-const HealthIssue = require('../models/healthIssueModel'); // ✅ fix case-sensitive import
+const HealthIssue = require('../models/healthIssuemodel');
 
 // helper function: map string → ObjectId
 async function mapHealthIssue(reqBody) {
