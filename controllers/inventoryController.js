@@ -213,6 +213,7 @@ exports.listInventory = async (req, res) => {
       const pricing = product?.pricing?.[0] || { price: 0, gst: 0 };
 
       return {
+        inventoryId: inv._id,   
         productName: product?.name,
         sku: product?.sku,
         category: product?.category,
