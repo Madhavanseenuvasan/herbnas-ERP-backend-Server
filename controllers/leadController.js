@@ -1,6 +1,7 @@
 const Lead = require('../models/leadModel');
-const HealthIssue = require('../models/healthIssuemodel'); // ✅ import HealthIssue model
+const HealthIssue = require('../models/healthIssueModel'); // ✅ fix case-sensitive import
 
+// helper function: map string → ObjectId
 async function mapHealthIssue(reqBody) {
   if (reqBody.healthIssue && typeof reqBody.healthIssue === 'string') {
     const issueDoc = await HealthIssue.findOne({
@@ -17,7 +18,6 @@ async function mapHealthIssue(reqBody) {
 // Create Lead
 exports.createLead = async (req, res) => {
   try {
-    // convert healthIssue string to ObjectId
     await mapHealthIssue(req.body);
 
     const leadCount = await Lead.countDocuments();
@@ -26,8 +26,11 @@ exports.createLead = async (req, res) => {
     const newLead = new Lead({ ...req.body, leadId });
     await newLead.save();
 
-    // populate healthIssue before returning
-    const populatedLead = await newLead.populate('healthIssue', 'name description');
+    // populate healthIssue with real fields
+    const populatedLead = await newLead.populate(
+      'healthIssue',
+      'healthIssue gender maritalStatus fromAge toAge'
+    );
 
     res.status(201).json(populatedLead);
   } catch (err) {
@@ -35,12 +38,12 @@ exports.createLead = async (req, res) => {
   }
 };
 
-// Get Leads with filtering and pagination
+// Get Leads
 exports.getLeads = async (req, res) => {
   try {
     const leads = await Lead.find()
       .sort({ createdAt: -1 })
-      .populate('healthIssue', 'name description'); // only return name & description
+      .populate('healthIssue', 'healthIssue gender maritalStatus fromAge toAge');
 
     res.json(leads);
   } catch (err) {
@@ -52,7 +55,7 @@ exports.getLeads = async (req, res) => {
 exports.getLeadById = async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id)
-      .populate('healthIssue', 'name description');
+      .populate('healthIssue', 'healthIssue gender maritalStatus fromAge toAge');
 
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
@@ -65,14 +68,13 @@ exports.getLeadById = async (req, res) => {
 // Update Lead
 exports.updateLead = async (req, res) => {
   try {
-    // convert healthIssue string to ObjectId
     await mapHealthIssue(req.body);
 
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true }
-    ).populate('healthIssue', 'name description');
+    ).populate('healthIssue', 'healthIssue gender maritalStatus fromAge toAge');
 
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
