@@ -43,10 +43,26 @@
 // };
 
 const Lead = require('../models/leadModel');
+const HealthIssue = require('../models/healthIssueModel'); // ✅ import HealthIssue model
+
+// helper function to map string → ObjectId
+async function mapHealthIssue(reqBody) {
+  if (reqBody.healthIssue && typeof reqBody.healthIssue === 'string') {
+    const issueDoc = await HealthIssue.findOne({ name: reqBody.healthIssue });
+    if (issueDoc) {
+      reqBody.healthIssue = issueDoc._id;
+    } else {
+      throw new Error(`Health issue "${reqBody.healthIssue}" not found in DB`);
+    }
+  }
+}
 
 // Create Lead
 exports.createLead = async (req, res) => {
   try {
+    // convert healthIssue string to ObjectId
+    await mapHealthIssue(req.body);
+
     const leadCount = await Lead.countDocuments();
     const leadId = `Lead${(leadCount + 1).toString().padStart(5, '0')}`;
 
@@ -92,6 +108,9 @@ exports.getLeadById = async (req, res) => {
 // Update Lead
 exports.updateLead = async (req, res) => {
   try {
+    // convert healthIssue string to ObjectId
+    await mapHealthIssue(req.body);
+
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
       req.body,
