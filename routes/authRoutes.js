@@ -42,5 +42,12 @@ router.route('/:id/web-acess')
 router.route('/search/:name')
   .get(getUserByName)
 
+router.get('/me', authenticate, (req, res) => {
+  if (!req.user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  res.json({ user: req.user });
+});
+
 
 module.exports = router;
