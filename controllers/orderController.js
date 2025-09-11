@@ -1,5 +1,5 @@
 const Order = require("../models/orderModel");
-const Product = require("../models/productModel");
+const {Product} = require("../models/productModel");
 const { Inventory, InventoryTransaction } = require("../models/inventoryModel");
 
 // Import stock helpers
