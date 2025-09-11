@@ -15,7 +15,7 @@ const leadSchema = new mongoose.Schema({
   product: { type: String, required: true },
   healthIssue: {
   type: mongoose.Schema.Types.ObjectId,
-  ref: 'healthIssue'
+  ref: 'HealthIssue'
 },
   reminder: { type: Date },
   age: { type: Number },
