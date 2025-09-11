@@ -1,4 +1,4 @@
-const Product = require("../models/productModel");
+const { Product, RawMaterial, FinishedGood } = require("../models/productModel");
 const { logAction } = require("../utils/auditLogger");
 
 // ---------- Helper: Pricing Calculation (array version) ----------
@@ -271,6 +271,180 @@ exports.deleteProduct = async (req, res) => {
     });
 
     res.json({ message: "Product deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Add Raw Material
+exports.addRawMaterial = async (req, res) => {
+  try {
+    const material = new RawMaterial(req.body);
+    await material.save();
+
+    await logAction({
+      module: "RawMaterial",
+      action: "CREATE",
+      entityId: material._id,
+      performedBy: req.user?._id,
+      details: req.body
+    });
+
+    res.status(201).json(material);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// Edit Raw Material
+exports.editRawMaterial = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const material = await RawMaterial.findByIdAndUpdate(id, req.body, {
+      new: true,
+      runValidators: true
+    });
+    if (!material) return res.status(404).json({ error: "Raw Material not found" });
+
+    await logAction({
+      module: "RawMaterial",
+      action: "UPDATE",
+      entityId: id,
+      performedBy: req.user?._id,
+      details: req.body
+    });
+
+    res.json(material);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get All Raw Materials
+exports.getAllRawMaterials = async (req, res) => {
+  try {
+    const materials = await RawMaterial.find();
+    res.json(materials);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get Single Raw Material
+exports.getRawMaterial = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const material = await RawMaterial.findById(id);
+    if (!material) return res.status(404).json({ error: "Raw Material not found" });
+    res.json(material);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Delete Raw Material
+exports.deleteRawMaterial = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const material = await RawMaterial.findByIdAndDelete(id);
+    if (!material) return res.status(404).json({ error: "Raw Material not found" });
+
+    await logAction({
+      module: "RawMaterial",
+      action: "DELETE",
+      entityId: id,
+      performedBy: req.user?._id
+    });
+
+    res.json({ message: "Raw Material deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// -------------------- FINISHED GOODS CRUD --------------------
+
+// Add Finished Good
+exports.addFinishedGood = async (req, res) => {
+  try {
+    const product = new FinishedGood(req.body);
+    await product.save();
+
+    await logAction({
+      module: "FinishedGood",
+      action: "CREATE",
+      entityId: product._id,
+      performedBy: req.user?._id,
+      details: req.body
+    });
+
+    res.status(201).json(product);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// Edit Finished Good
+exports.editFinishedGood = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await FinishedGood.findByIdAndUpdate(id, req.body, {
+      new: true,
+      runValidators: true
+    });
+    if (!product) return res.status(404).json({ error: "Finished Good not found" });
+
+    await logAction({
+      module: "FinishedGood",
+      action: "UPDATE",
+      entityId: id,
+      performedBy: req.user?._id,
+      details: req.body
+    });
+
+    res.json(product);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get All Finished Goods
+exports.getAllFinishedGoods = async (req, res) => {
+  try {
+    const products = await FinishedGood.find();
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get Single Finished Good
+exports.getFinishedGood = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await FinishedGood.findById(id);
+    if (!product) return res.status(404).json({ error: "Finished Good not found" });
+    res.json(product);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Delete Finished Good
+exports.deleteFinishedGood = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await FinishedGood.findByIdAndDelete(id);
+    if (!product) return res.status(404).json({ error: "Finished Good not found" });
+
+    await logAction({
+      module: "FinishedGood",
+      action: "DELETE",
+      entityId: id,
+      performedBy: req.user?._id
+    });
+
+    res.json({ message: "Finished Good deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

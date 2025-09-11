@@ -299,6 +299,45 @@ exports.createLocation = async (req, res) => {
   }
 };
 
+// -------------------- Location Update --------------------
+exports.updateLocation = async (req, res) => {
+  try {
+    const { locationId } = req.params;
+    const updateData = req.body;
+
+    const location = await Location.findByIdAndUpdate(locationId, updateData, {
+      new: true,
+      runValidators: true
+    });
+
+    if (!location) {
+      return res.status(404).json({ error: "Location not found" });
+    }
+
+    res.status(200).json({ message: "Location updated successfully", location });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// -------------------- Location Delete --------------------
+exports.deleteLocation = async (req, res) => {
+  try {
+    const { locationId } = req.params;
+
+    const location = await Location.findByIdAndDelete(locationId);
+
+    if (!location) {
+      return res.status(404).json({ error: "Location not found" });
+    }
+
+    res.status(200).json({ message: "Location deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
 // -------------------- Export helpers --------------------
 module.exports.reserveStockInternal = reserveStockInternal;
 module.exports.releaseStockInternal = releaseStockInternal;

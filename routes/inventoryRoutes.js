@@ -27,4 +27,10 @@ router.get('/locations/all', inventoryController.getLocations);
 // Create new location
 router.post('/locations', inventoryController.createLocation);
 
+// Update location
+router.put('/locations/:locationId', inventoryController.updateLocation);
+
+// Delete location
+router.delete('/locations/:locationId', inventoryController.deleteLocation);
+
 module.exports = router;
