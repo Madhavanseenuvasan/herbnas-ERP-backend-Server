@@ -13,7 +13,10 @@ const leadSchema = new mongoose.Schema({
   contact: { type: String, required: true },
   leadStatus: { type: String, enum: ['New', 'Dispatched', 'Order Completed', 'Qualified', 'Pending'], default: 'New' },
   product: { type: String, required: true },
-  healthIssue: { type: String },
+  healthIssue: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'HealthIssue'
+},
   reminder: { type: Date },
   age: { type: Number },
   gender: { type: String, enum: ['Male', 'Female', 'Other'] },
