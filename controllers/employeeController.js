@@ -13,27 +13,12 @@ exports.createEmployee = async (req, res) => {
 
 // Get all employees
 exports.getEmployees = async (req, res) => {
-    try {
-    // 🔹 Read page & limit from query params (default: page=1, limit=10)
-    const { page = 1, limit = 10 } = req.query;
-
-    // 🔹 Convert to numbers
-    const pageNumber = parseInt(page, 10);
-    const limitNumber = parseInt(limit, 10);
-
-    // 🔹 Fetch employees with pagination
-    const employees = await Employee.find()
-      .skip((pageNumber - 1) * limitNumber)
-      .limit(limitNumber);
-
-    // 🔹 Count total employees
-    const total = await Employee.countDocuments();
+  try {
+    // 🔹 Fetch all employees
+    const employees = await Employee.find();
 
     res.json({
       success: true,
-      total,
-      page: pageNumber,
-      pages: Math.ceil(total / limitNumber),
       count: employees.length,
       data: employees
     });
@@ -41,6 +26,7 @@ exports.getEmployees = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 // Get single employee
 exports.getEmployeeById = async (req, res) => {
