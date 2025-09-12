@@ -50,13 +50,13 @@ exports.createLead = async (req, res) => {
   }
 };
 
-// Get Leads (with pagination + healthIssue as string)
+// Get Leads (with optional pagination + healthIssue as string)
 exports.getLeads = async (req, res) => {
   try {
-    let { page = 1, limit = 10, leadStatus, product, gender, fromDate, toDate, search } = req.query;
+    let { page = 1, limit, leadStatus, product, gender, fromDate, toDate, search } = req.query;
 
     page = parseInt(page, 10);
-    limit = parseInt(limit, 10);
+    limit = limit ? parseInt(limit, 10) : 0; // 0 means no limit
 
     const query = {};
 
@@ -76,21 +76,24 @@ exports.getLeads = async (req, res) => {
       ];
     }
 
-    const leads = await Lead.find(query)
+    const leadsQuery = Lead.find(query)
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .populate('healthIssue', 'healthIssue'); // only get the healthIssue field
+      .populate('healthIssue', 'healthIssue');
 
+    if (limit > 0) {
+      leadsQuery.skip((page - 1) * limit).limit(limit);
+    }
+
+    const leads = await leadsQuery;
     const total = await Lead.countDocuments(query);
 
     res.json({
       success: true,
       total,
       page,
-      pages: Math.ceil(total / limit),
+      pages: limit > 0 ? Math.ceil(total / limit) : 1,
       count: leads.length,
-      data: leads.map(transformLead) // convert healthIssue → string
+      data: leads.map(transformLead), // convert healthIssue → string
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
