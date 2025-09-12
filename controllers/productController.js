@@ -142,22 +142,12 @@ exports.activateProduct = async (req, res) => {
   }
 };
 
-// ---------- Get All Products with Pagination ----------
+// ---------- Get All Products ----------
 exports.getAllProducts = async (req, res) => {
   try {
-    let { page = 1, limit = 10 } = req.query;
+    const products = await Product.find();
 
-    page = parseInt(page);
-    limit = parseInt(limit);
-
-    const skip = (page - 1) * limit;
-
-    const [products, total] = await Promise.all([
-      Product.find().skip(skip).limit(limit),
-      Product.countDocuments()
-    ]);
-
-    // Format products
+    // Show pricing-related info from the first tier only
     const formatted = products.map((p) => {
       const pricingArr = Array.isArray(p.pricing) ? p.pricing : [];
       const tier = pricingArr[0] || {};
@@ -182,18 +172,11 @@ exports.getAllProducts = async (req, res) => {
       };
     });
 
-    res.json({
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-      products: formatted
-    });
+    res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
-
 
 // ---------- Get Single Product ----------
 exports.getProduct = async (req, res) => {
@@ -337,28 +320,10 @@ exports.editRawMaterial = async (req, res) => {
   }
 };
 
-// ---------- Get All Raw Materials with Pagination ----------
 exports.getAllRawMaterials = async (req, res) => {
   try {
-    let { page = 1, limit = 10 } = req.query;
-
-    page = parseInt(page);
-    limit = parseInt(limit);
-
-    const skip = (page - 1) * limit;
-
-    const [materials, total] = await Promise.all([
-      RawMaterial.find().skip(skip).limit(limit),
-      RawMaterial.countDocuments()
-    ]);
-
-    res.json({
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-      materials
-    });
+    const materials = await RawMaterial.find();
+    res.json(materials);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -443,33 +408,15 @@ exports.editFinishedGood = async (req, res) => {
   }
 };
 
-// ---------- Get All Finished Goods with Pagination ----------
+// Get All Finished Goods
 exports.getAllFinishedGoods = async (req, res) => {
   try {
-    let { page = 1, limit = 10 } = req.query;
-
-    page = parseInt(page);
-    limit = parseInt(limit);
-
-    const skip = (page - 1) * limit;
-
-    const [products, total] = await Promise.all([
-      FinishedGood.find().skip(skip).limit(limit),
-      FinishedGood.countDocuments()
-    ]);
-
-    res.json({
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-      products
-    });
+    const products = await FinishedGood.find();
+    res.json(products);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
-
 
 // Get Single Finished Good
 exports.getFinishedGood = async (req, res) => {
