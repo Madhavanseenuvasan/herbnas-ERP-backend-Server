@@ -16,12 +16,7 @@ exports.getEmployees = async (req, res) => {
   try {
     // 🔹 Fetch all employees
     const employees = await Employee.find();
-
-    res.json({
-      success: true,
-      count: employees.length,
-      data: employees
-    });
+    res.status(201).json(employees);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
