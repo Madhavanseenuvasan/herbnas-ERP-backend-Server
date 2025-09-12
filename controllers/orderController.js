@@ -133,12 +133,7 @@ exports.updateOrder = async (req, res) => {
     const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: "Order not found" });
 
-    // Only handle stock changes if still in Draft (reservation stage)
     if (Array.isArray(products) && products.length > 0) {
-      if (order.status !== "Draft") {
-        return res.status(400).json({ error: "Products can only be updated while order is in Draft" });
-      }
-
       // Release previously reserved stock
       for (const oldItem of order.products) {
         await releaseStockInternal(
@@ -197,6 +192,7 @@ exports.updateOrder = async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 };
+
 
 // ---------- Process Return ----------
 exports.processReturn = async (req, res) => {
