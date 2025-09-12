@@ -5,7 +5,7 @@ const HealthIssue = require('../models/healthIssuemodel');
 async function mapHealthIssue(reqBody) {
   if (reqBody.healthIssue && typeof reqBody.healthIssue === 'string') {
     const issueDoc = await HealthIssue.findOne({
-      healthIssue: { $regex: new RegExp(`^${reqBody.healthIssue}$`, 'i') } // case-insensitive match
+      healthIssue: { $regex: new RegExp(`^${reqBody.healthIssue}$`, 'i') } // case-insensitive
     });
     if (issueDoc) {
       reqBody.healthIssue = issueDoc._id;
@@ -13,6 +13,19 @@ async function mapHealthIssue(reqBody) {
       throw new Error(`Health issue "${reqBody.healthIssue}" not found in DB`);
     }
   }
+}
+
+// helper function: transform healthIssue object → string
+function transformLead(lead) {
+  const obj = lead.toObject ? lead.toObject() : lead;
+
+  if (Array.isArray(obj.healthIssue)) {
+    obj.healthIssue = obj.healthIssue.map((issue) => issue.healthIssue).join(', ');
+  } else if (obj.healthIssue && typeof obj.healthIssue === 'object') {
+    obj.healthIssue = obj.healthIssue.healthIssue;
+  }
+
+  return obj;
 }
 
 // Create Lead
@@ -26,19 +39,18 @@ exports.createLead = async (req, res) => {
     const newLead = new Lead({ ...req.body, leadId });
     await newLead.save();
 
-    // populate healthIssue with real fields
     const populatedLead = await newLead.populate(
       'healthIssue',
-      'healthIssue gender maritalStatus fromAge toAge'
+      'healthIssue' // only fetch healthIssue string
     );
 
-    res.status(201).json(populatedLead);
+    res.status(201).json(transformLead(populatedLead));
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
 };
 
-// Get Leads
+// Get Leads (with pagination + healthIssue as string)
 exports.getLeads = async (req, res) => {
   try {
     let { page = 1, limit = 10, leadStatus, product, gender, fromDate, toDate, search } = req.query;
@@ -48,17 +60,14 @@ exports.getLeads = async (req, res) => {
 
     const query = {};
 
-    // 🔎 Filtering conditions
     if (leadStatus) query.leadStatus = leadStatus;
     if (product) query.product = product;
     if (gender) query.gender = gender;
 
-    // 🔎 Date range filter
     if (fromDate && toDate) {
       query.createdAt = { $gte: new Date(fromDate), $lte: new Date(toDate) };
     }
 
-    // 🔎 Search by name, email, or contact
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -67,13 +76,12 @@ exports.getLeads = async (req, res) => {
       ];
     }
 
-    // 🔹 Fetch leads with filters + pagination
     const leads = await Lead.find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(limit);
+      .limit(limit)
+      .populate('healthIssue', 'healthIssue'); // only get the healthIssue field
 
-    // 🔹 Count total leads
     const total = await Lead.countDocuments(query);
 
     res.json({
@@ -82,7 +90,7 @@ exports.getLeads = async (req, res) => {
       page,
       pages: Math.ceil(total / limit),
       count: leads.length,
-      data: leads
+      data: leads.map(transformLead) // convert healthIssue → string
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -93,11 +101,11 @@ exports.getLeads = async (req, res) => {
 exports.getLeadById = async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id)
-      .populate('healthIssue', 'healthIssue gender maritalStatus fromAge toAge');
+      .populate('healthIssue', 'healthIssue');
 
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
-    res.json(lead);
+    res.json(transformLead(lead));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -112,11 +120,11 @@ exports.updateLead = async (req, res) => {
       req.params.id,
       req.body,
       { new: true }
-    ).populate('healthIssue', 'healthIssue gender maritalStatus fromAge toAge');
+    ).populate('healthIssue', 'healthIssue');
 
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
-    res.json(lead);
+    res.json(transformLead(lead));
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
