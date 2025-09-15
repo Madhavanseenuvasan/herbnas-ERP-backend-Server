@@ -1,54 +1,12 @@
-// const Lead = require('../models/leadModel');
-
-// // Create Lead
-// exports.createLead = async (req, res) => {
-//   try {
-//     const leadCount = await Lead.countDocuments();
-//     const leadId = `Lead${(leadCount + 1).toString().padStart(5, '0')}`;
-//     const newLead = new Lead({ ...req.body, leadId });
-//     await newLead.save();
-//     res.status(201).json(newLead);
-//   } catch (err) {
-//     res.status(400).json({ message: err.message });
-//   }
-// };
-// // get leads with filtering and pagination
-// exports.getLeads = async (req, res) => {
-//   try {
-//     const leads = await Lead.find().sort({ createdAt: -1 }); // get all leads, latest first
-//     res.json(leads);
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// };
-
-// // Get Lead by ID
-// exports.getLeadById = async (req, res) => {
-//   const lead = await Lead.findById(req.params.id);
-//   if (!lead) return res.status(404).json({ message: 'Lead not found' });
-//   res.json(lead);
-// };
-
-// // Update Lead
-// exports.updateLead = async (req, res) => {
-//   const lead = await Lead.findByIdAndUpdate(req.params.id, req.body, { new: true });
-//   if (!lead) return res.status(404).json({ message: 'Lead not found' });
-//   res.json(lead);
-// };
-
-// // Delete Lead
-// exports.deleteLead = async (req, res) => {
-//   await Lead.findByIdAndDelete(req.params.id);
-//   res.json({ message: 'Lead deleted successfully' });
-// };
-
 const Lead = require('../models/leadModel');
-const HealthIssue = require('../models/healthIssuemodel'); // ✅ import HealthIssue model
+const HealthIssue = require('../models/healthIssuemodel');
 
-// helper function to map string → ObjectId
+// helper function: map string → ObjectId
 async function mapHealthIssue(reqBody) {
   if (reqBody.healthIssue && typeof reqBody.healthIssue === 'string') {
-    const issueDoc = await HealthIssue.findOne({ name: reqBody.healthIssue });
+    const issueDoc = await HealthIssue.findOne({
+      healthIssue: { $regex: new RegExp(`^${reqBody.healthIssue}$`, 'i') } // case-insensitive
+    });
     if (issueDoc) {
       reqBody.healthIssue = issueDoc._id;
     } else {
@@ -57,10 +15,22 @@ async function mapHealthIssue(reqBody) {
   }
 }
 
+// helper function: transform healthIssue object → string
+function transformLead(lead) {
+  const obj = lead.toObject ? lead.toObject() : lead;
+
+  if (Array.isArray(obj.healthIssue)) {
+    obj.healthIssue = obj.healthIssue.map((issue) => issue.healthIssue).join(', ');
+  } else if (obj.healthIssue && typeof obj.healthIssue === 'object') {
+    obj.healthIssue = obj.healthIssue.healthIssue;
+  }
+
+  return obj;
+}
+
 // Create Lead
 exports.createLead = async (req, res) => {
   try {
-    // convert healthIssue string to ObjectId
     await mapHealthIssue(req.body);
 
     const leadCount = await Lead.countDocuments();
@@ -69,23 +39,62 @@ exports.createLead = async (req, res) => {
     const newLead = new Lead({ ...req.body, leadId });
     await newLead.save();
 
-    // populate healthIssue before returning
-    const populatedLead = await newLead.populate('healthIssue', 'name description');
+    const populatedLead = await newLead.populate(
+      'healthIssue',
+      'healthIssue' // only fetch healthIssue string
+    );
 
-    res.status(201).json(populatedLead);
+    res.status(201).json(transformLead(populatedLead));
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
 };
 
-// Get Leads with filtering and pagination
+// Get Leads (with optional pagination + healthIssue as string)
 exports.getLeads = async (req, res) => {
   try {
-    const leads = await Lead.find()
-      .sort({ createdAt: -1 })
-      .populate('healthIssue', 'name description'); // only return name & description
+    let { page = 1, limit, leadStatus, product, gender, fromDate, toDate, search } = req.query;
 
-    res.json(leads);
+    page = parseInt(page, 10);
+    limit = limit ? parseInt(limit, 10) : 0; // 0 means no limit
+
+    const query = {};
+
+    if (leadStatus) query.leadStatus = leadStatus;
+    if (product) query.product = product;
+    if (gender) query.gender = gender;
+
+    if (fromDate && toDate) {
+      query.createdAt = { $gte: new Date(fromDate), $lte: new Date(toDate) };
+    }
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { contact: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const leadsQuery = Lead.find(query)
+      .sort({ createdAt: -1 })
+      .populate('healthIssue', 'healthIssue');
+
+    if (limit > 0) {
+      leadsQuery.skip((page - 1) * limit).limit(limit);
+    }
+
+    const leads = await leadsQuery;
+    const total = await Lead.countDocuments(query);
+
+    res.json({
+      success: true,
+      total,
+      page,
+      pages: limit > 0 ? Math.ceil(total / limit) : 1,
+      count: leads.length,
+      data: leads.map(transformLead), // convert healthIssue → string
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -95,11 +104,11 @@ exports.getLeads = async (req, res) => {
 exports.getLeadById = async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id)
-      .populate('healthIssue', 'name description');
+      .populate('healthIssue', 'healthIssue');
 
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
-    res.json(lead);
+    res.json(transformLead(lead));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -108,18 +117,17 @@ exports.getLeadById = async (req, res) => {
 // Update Lead
 exports.updateLead = async (req, res) => {
   try {
-    // convert healthIssue string to ObjectId
     await mapHealthIssue(req.body);
 
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true }
-    ).populate('healthIssue', 'name description');
+    ).populate('healthIssue', 'healthIssue');
 
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
-    res.json(lead);
+    res.json(transformLead(lead));
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

@@ -14,12 +14,14 @@ exports.createEmployee = async (req, res) => {
 // Get all employees
 exports.getEmployees = async (req, res) => {
   try {
+    // 🔹 Fetch all employees
     const employees = await Employee.find();
-    res.json(employees);
+    res.status(201).json(employees);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 // Get single employee
 exports.getEmployeeById = async (req, res) => {

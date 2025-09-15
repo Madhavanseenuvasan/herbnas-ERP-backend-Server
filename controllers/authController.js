@@ -100,8 +100,58 @@ exports.superAdminSetPassword = async (req, res) => {
 
 // Get all users (only Super Admin & Branch Manager)
 exports.getUsers = async (req, res) => {
-  const users = await User.find();
-  res.json(users);
+  try {
+    // Parse pagination params
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10)); // max 100
+    const skip = (page - 1) * limit;
+
+    // Build filter object from optional query params
+    const filter = {};
+
+    // Optional simple filters: role, branch, isActive
+    if (req.query.role) filter.role = req.query.role;
+    if (req.query.branch) filter.branch = req.query.branch;
+    if (typeof req.query.isActive !== 'undefined') {
+      // expect 'true' or 'false' string in query param
+      filter.isActive = req.query.isActive === 'true';
+    }
+
+    // Optional search across name, email, mobileNo, employeeId with ?q=term
+    if (req.query.q) {
+      const q = req.query.q.trim();
+      const regex = new RegExp(q, 'i');
+      filter.$or = [
+        { name: regex },
+        { email: regex },
+        { mobileNo: regex },
+        { employeeId: regex }
+      ];
+    }
+
+    // Count total matching documents for pagination metadata
+    const total = await User.countDocuments(filter);
+
+    // Fetch users (omit password) — you can change sort as needed
+    const users = await User.find(filter)
+      .select('-password')
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
+
+    const totalPages = Math.ceil(total / limit);
+
+    res.json({
+      page,
+      limit,
+      total,
+      totalPages,
+      count: users.length,
+      users
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // Update user role/branch

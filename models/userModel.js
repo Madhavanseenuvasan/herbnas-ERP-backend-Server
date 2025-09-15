@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema({
   employeeId: { type: String, unique: true },
   role: {
     type: String,
-    enum: ['admin', 'super_admin', 'supervisor', 'junior_supervisor', 'staff'],
+    enum: ['admin', 'super_admin', 'supervisor', 'production_manager','account_manager','sales'],
     default: 'staff',
     required: true
   },
@@ -66,3 +66,4 @@ userSchema.methods.generateResetToken = function () {
 };
 
 module.exports = mongoose.model('User', userSchema); 
+
