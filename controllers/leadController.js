@@ -5,7 +5,7 @@ const HealthIssue = require('../models/healthIssuemodel');
 async function mapHealthIssue(reqBody) {
   if (reqBody.healthIssue && typeof reqBody.healthIssue === 'string') {
     const issueDoc = await HealthIssue.findOne({
-      healthIssue: { $regex: new RegExp(`^${reqBody.healthIssue}$`, 'i') } // case-insensitive
+      healthIssue: { $regex: new RegExp(`^${reqBody.healthIssue}$`, 'i') }
     });
     if (issueDoc) {
       reqBody.healthIssue = issueDoc._id;
@@ -28,21 +28,15 @@ function transformLead(lead) {
   return obj;
 }
 
-// Create Lead
+// ✅ Create single Lead
 exports.createLead = async (req, res) => {
   try {
     await mapHealthIssue(req.body);
 
-    const leadCount = await Lead.countDocuments();
-    const leadId = `Lead${(leadCount + 1).toString().padStart(5, '0')}`;
-
-    const newLead = new Lead({ ...req.body, leadId });
+    const newLead = new Lead(req.body);
     await newLead.save();
 
-    const populatedLead = await newLead.populate(
-      'healthIssue',
-      'healthIssue' // only fetch healthIssue string
-    );
+    const populatedLead = await newLead.populate('healthIssue', 'healthIssue');
 
     res.status(201).json(transformLead(populatedLead));
   } catch (err) {
@@ -50,13 +44,36 @@ exports.createLead = async (req, res) => {
   }
 };
 
-// Get Leads (with optional pagination + healthIssue as string)
+// ✅ Bulk Create Leads
+exports.bulkCreateLeads = async (req, res) => {
+  try {
+    if (!Array.isArray(req.body.leads) || req.body.leads.length === 0) {
+      return res.status(400).json({ message: "Please provide an array of leads" });
+    }
+
+    // Map health issues for each lead
+    for (const lead of req.body.leads) {
+      await mapHealthIssue(lead);
+    }
+
+    const createdLeads = await Lead.insertMany(req.body.leads);
+    res.status(201).json({
+      success: true,
+      count: createdLeads.length,
+      data: createdLeads.map(transformLead),
+    });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// ✅ Get Leads
 exports.getLeads = async (req, res) => {
   try {
     let { page = 1, limit, leadStatus, product, gender, fromDate, toDate, search } = req.query;
 
     page = parseInt(page, 10);
-    limit = limit ? parseInt(limit, 10) : 0; // 0 means no limit
+    limit = limit ? parseInt(limit, 10) : 0;
 
     const query = {};
 
@@ -93,18 +110,17 @@ exports.getLeads = async (req, res) => {
       page,
       pages: limit > 0 ? Math.ceil(total / limit) : 1,
       count: leads.length,
-      data: leads.map(transformLead), // convert healthIssue → string
+      data: leads.map(transformLead),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-// Get Lead by ID
+// ✅ Get Lead by ID
 exports.getLeadById = async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id)
-      .populate('healthIssue', 'healthIssue');
+    const lead = await Lead.findById(req.params.id).populate('healthIssue', 'healthIssue');
 
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
@@ -114,16 +130,13 @@ exports.getLeadById = async (req, res) => {
   }
 };
 
-// Update Lead
+// ✅ Update Lead
 exports.updateLead = async (req, res) => {
   try {
     await mapHealthIssue(req.body);
 
-    const lead = await Lead.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    ).populate('healthIssue', 'healthIssue');
+    const lead = await Lead.findByIdAndUpdate(req.params.id, req.body, { new: true })
+      .populate('healthIssue', 'healthIssue');
 
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
@@ -133,7 +146,7 @@ exports.updateLead = async (req, res) => {
   }
 };
 
-// Delete Lead
+// ✅ Delete Lead
 exports.deleteLead = async (req, res) => {
   try {
     const lead = await Lead.findByIdAndDelete(req.params.id);
