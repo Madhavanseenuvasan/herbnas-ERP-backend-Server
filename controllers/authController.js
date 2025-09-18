@@ -99,6 +99,7 @@ exports.superAdminSetPassword = async (req, res) => {
 
 
 // Get all users (only Super Admin & Branch Manager)
+// Get all users (only Super Admin & Branch Manager) — now with pagination, search & basic filters
 exports.getUsers = async (req, res) => {
   try {
     // Parse pagination params
@@ -153,6 +154,31 @@ exports.getUsers = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// Get single user by ID
+exports.getUserById = async (req, res) => {
+  try {
+    const { id } = req.params; // userId comes from URL
+
+    // Validate MongoDB ObjectId
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    // Find user (exclude password field)
+    const user = await User.findById(id).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
 
 // Update user role/branch
 exports.updateUser = async (req, res) => {
@@ -209,27 +235,6 @@ exports.toggleWebAccess = async (req, res) => {
   res.json({ webAccess: user.webAccess });
 };
 
-//forgot password
-// exports.forgotPassword = async (req, res) => {
-//     const user = await User.findOne({ email: req.body.email });
-//     if (!user) return res.status(404).json({ error: 'User not found' });
-
-//     const resetToken = user.generateResetToken();
-//     await user.save({ validateBeforeSave: false });
-
-//     const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/reset-password/${resetToken}`;
-//     const message = `<p>Click <a href="${resetUrl}">here</a> to reset your password. This link expires in 10 minutes.</p>`;
-
-//     try {
-//         await sendEmail(user.email, 'Password Reset', message);
-//         res.status(200).json({ message: 'Reset email sent' });
-//     } catch (err) {
-//         user.resetPasswordToken = undefined;
-//         user.resetPasswordExpire = undefined;
-//         await user.save({ validateBeforeSave: false });
-//         res.status(500).json({ error: 'Email failed to send' });
-//     }
-// };
 
 exports.updateRole = async (req, res) => {
   try {
@@ -260,30 +265,6 @@ exports.updateRole = async (req, res) => {
   }
 };
 
-// exports.resetPassword = async (req, res) => {
-//     try {
-//         if (!req.body.password) {
-//             return res.status(400).json({ error: 'Password is required' });
-//         }
 
-//         const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
-//         const user = await User.findOne({
-//             resetPasswordToken: hashedToken,
-//             resetPasswordExpire: { $gt: Date.now() }
-//         });
 
-//         if (!user) {
-//             return res.status(400).json({ error: 'Token is invalid or has expired' });
-//         }
 
-//         user.password = await bcrypt.hash(req.body.password, 10);
-//         user.resetPasswordToken = undefined;
-//         user.resetPasswordExpire = undefined;
-//         await user.save();
-
-//         res.status(200).json({ message: 'Password reset successful' });
-//     } catch (error) {
-//         console.error('Reset error:', error);
-//         res.status(500).json({ error: 'Server error' });
-//     }
-// };
