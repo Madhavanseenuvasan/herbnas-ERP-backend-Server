@@ -3,7 +3,7 @@ const router = express.Router();
 
 const { authenticate } = require('../middleware/authMiddleware');
 const { authorizeRoles } = require('../middleware/roleMiddleware');
-const { register, login, getUsers, updateUser, forgotPassword, resetPassword, deactivateUser, updateRole, deleteUser, getUserByName, toggleWebAccess, superAdminSetPassword } = require('../controllers/authController');
+const { register, login, getUsers, updateUser, forgotPassword, resetPassword, deactivateUser, updateRole, deleteUser, getUserByName, toggleWebAccess, superAdminSetPassword, getUserById } = require('../controllers/authController');
 
 //  Authentication
 router.route("/register").post(register);
@@ -14,7 +14,8 @@ router.route("/login").post(login);
 router.route("/")
   .get(authenticate, authorizeRoles("super_admin", "branch_manager"), getUsers);
 
-
+router.route("/:id")
+  .get(authenticate, getUserById);
 
 // Only one .put route for /:id, handle updateUser and updateRole in controller
 router.route("/:id")
@@ -24,13 +25,8 @@ router.route("/:id/deactivate")
   .put(authenticate, authorizeRoles("super_admin"), deactivateUser);
 
 
-// router.route('/forgot-password').post(forgotPassword);
-
-// router.route('/reset-password/:token').post(resetPassword);
-
-
 router.route('/reset-password/:userId')
-  .put(authenticate,authorizeRoles("super_admin"), superAdminSetPassword)
+  .put(authenticate, authorizeRoles("super_admin"), superAdminSetPassword)
 
 
 router.route('/:id')
@@ -39,7 +35,7 @@ router.route('/:id')
 router.route('/:id/web-acess')
   .patch(authenticate, authorizeRoles("super_admin", "admin"), toggleWebAccess);
 
-router.route('/search/:name')
+router.route('/search/:id')
   .get(getUserByName)
 
 router.get('/me', authenticate, (req, res) => {
