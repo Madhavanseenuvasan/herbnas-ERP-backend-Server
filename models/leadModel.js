@@ -1,9 +1,5 @@
 const mongoose = require("mongoose");
-const followUpSchema = new mongoose.Schema({
-  date: Date,
-  notes: String,
-  contactedBy: String
-});
+
 const leadSchema = new mongoose.Schema(
   {
     leadId: { type: String, unique: true, index: true },
@@ -30,7 +26,7 @@ const leadSchema = new mongoose.Schema(
       state: String,
       country: String,
     },
-    followUpReason: [followUpSchema],
+    followUpReason: {type: String},
     completed: { type: Boolean, default: false },
   },
   { timestamps: true }
