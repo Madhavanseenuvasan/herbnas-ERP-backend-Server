@@ -41,7 +41,6 @@ exports.register = async (req, res) => {
   }
 };
 
-// Login user
 exports.login = async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -52,17 +51,22 @@ exports.login = async (req, res) => {
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
+
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
+
     if (user.credentialStatus === 'Inactive') {
       return res.status(403).json({ message: 'Account is inactive. Contact admin.' });
     }
+
     res.status(200).json({
       message: "Login successful",
+      userId: user._id,   // ✅ ObjectId returned
       token: generateToken(user._id, user.role),
     });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
