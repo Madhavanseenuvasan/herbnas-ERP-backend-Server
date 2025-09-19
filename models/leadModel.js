@@ -17,9 +17,9 @@ const leadSchema = new mongoose.Schema(
       type: String,
       enum: ["Single", "Married", "Divorced", "Widowed"],
     },
-    dispatchedFrom: {type:string},
-    notes: {type:string},
-    remainder: {type:string},
+    dispatchedFrom: {type: String},
+    notes: {type: String},
+    remainder: {type: String},
     address: {
       city: String,
       pinCode: String,
