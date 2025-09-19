@@ -19,7 +19,7 @@ const leadSchema = new mongoose.Schema(
     },
     dispatchedFrom: {type: String},
     notes: {type: String},
-    remainder: {type: String},
+    reminder: {type: String},
     address: {
       city: String,
       pinCode: String,
