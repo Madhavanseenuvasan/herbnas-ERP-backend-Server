@@ -16,6 +16,7 @@ app.use("/api/users",require("./routes/authRoutes"));
 app.use("/api/leads",require("./routes/leadRoutes"));
 app.use("/api/employees",require("./routes/employeeRoutes"));
 
+app.use("/api/production", require("./routes/productionRoutes"));
 app.use("/api/product", require("./routes/productRoutes"));
 app.use("/api/branch", require("./routes/branchRoutes"));
 app.use("/api/inventory", require("./routes/inventoryRoutes"));

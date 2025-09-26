@@ -1,4 +1,3 @@
-const mongoose = require("mongoose");
 const { Inventory, InventoryTransaction, Location } = require("../models/inventoryModel");
 
 // -------------------- Helper Functions --------------------
