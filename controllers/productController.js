@@ -1,5 +1,4 @@
 const Product = require('../models/productModel');
-const { InventoryItem } = require('../models/inventoryModel');
 
 // -------------------- Create Product --------------------
 exports.createProduct = async (req, res) => {
@@ -22,17 +21,7 @@ exports.createProduct = async (req, res) => {
       ...rest
     });
 
-    // Also create in Inventory
-    await InventoryItem.create({
-      productId,
-      productName,
-      mrp,
-      gstPercent,
-      finalPrice,
-      ...rest
-    });
-
-    // Populate productName (fetch actual name)
+    // Populate reference name from Production model
     const populatedProduct = await Product.findById(product._id)
       .populate('productName', 'productName')
       .lean();
