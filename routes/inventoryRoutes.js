@@ -1,36 +1,20 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const inventoryController = require('../controllers/inventoryController');
+const inventoryController = require("../controllers/inventoryController");
 
-// -------------------- Inventory APIs --------------------
+// Add product/raw material to inventory
+router.post("/add", inventoryController.addInventoryItem);
 
-// List all inventory (with product, batch, category, supplier info)
-router.get('/', inventoryController.listInventory);
+// Get full inventory (all/branchwise)
+router.get("/", inventoryController.getInventory);
 
-// Get stock of a product by Product + Location
-router.get('/:productId/:locationId/stock', inventoryController.getStockByItemId);
+// Consume raw material in production
+router.post("/consume", inventoryController.consumeRawMaterial);
 
-// Adjust stock manually (INWARD, OUTWARD, ADJUSTMENT)
-router.post('/adjust', inventoryController.adjustStock);
+// Transfer between branches
+router.post("/transfer", inventoryController.transferStock);
 
-// Edit inventory
-router.put('/:inventoryId', inventoryController.editInventory);
-
-// Delete inventory
-router.delete('/:inventoryId', inventoryController.deleteInventory);
-
-// -------------------- Location APIs --------------------
-
-// Get all locations
-router.get('/locations/all', inventoryController.getLocations);
-
-// Create new location
-router.post('/locations', inventoryController.createLocation);
-
-// Update location
-router.put('/locations/:locationId', inventoryController.updateLocation);
-
-// Delete location
-router.delete('/locations/:locationId', inventoryController.deleteLocation);
+// View transaction logs
+router.get("/transactions", inventoryController.getTransactions);
 
 module.exports = router;

@@ -1,344 +1,130 @@
-const { Inventory, InventoryTransaction, Location } = require("../models/inventoryModel");
+const { InventoryTransaction, InventoryItem } = require("../models/inventoryModel");
+const Product = require("../models/productModel");
+const Branch = require("../models/branchModel");
 
-// -------------------- Helper Functions --------------------
-
-// Reserve stock (Draft orders)
-const reserveStockInternal = async (productId, locationId, qty, reference, user) => {
-  const inventory = await Inventory.findOne({ product: productId, location: locationId });
-  if (!inventory) throw new Error("Inventory record not found");
-  if (inventory.stock.available < qty) throw new Error("Insufficient stock to reserve");
-
-  inventory.stock.available -= qty;
-  inventory.stock.reserved += qty;
-
-  await inventory.save();
-
-  await InventoryTransaction.create({
-    product: productId,
-    location: locationId,
-    type: "RESERVE",
-    quantity: qty,
-    reference,
-    user
-  });
-
-  return inventory;
-};
-
-// Release reserved stock
-const releaseStockInternal = async (productId, locationId, qty, reference, user) => {
-  const inventory = await Inventory.findOne({ product: productId, location: locationId });
-  if (!inventory) throw new Error("Inventory record not found");
-
-  inventory.stock.reserved -= qty;
-  if (inventory.stock.reserved < 0) inventory.stock.reserved = 0;
-  inventory.stock.available += qty;
-
-  await inventory.save();
-
-  await InventoryTransaction.create({
-    product: productId,
-    location: locationId,
-    type: "RELEASE",
-    quantity: qty,
-    reference,
-    user
-  });
-
-  return inventory;
-};
-
-// Confirm reserved stock → dispatch
-const confirmStockInternal = async (productId, locationId, qty, reference, user) => {
-  const inventory = await Inventory.findOne({ product: productId, location: locationId });
-  if (!inventory) throw new Error("Inventory record not found");
-  if (inventory.stock.reserved < qty) throw new Error("Not enough reserved stock to confirm");
-
-  inventory.stock.reserved -= qty;
-  inventory.stock.dispatched += qty;
-
-  await inventory.save();
-
-  await InventoryTransaction.create({
-    product: productId,
-    location: locationId,
-    type: "OUT",
-    quantity: qty,
-    reference,
-    user
-  });
-
-  return inventory;
-};
-
-// Restore stock (returns / cancelled confirmed orders)
-const restoreStockInternal = async (productId, locationId, qty, reference, user) => {
-  const inventory = await Inventory.findOne({ product: productId, location: locationId });
-  if (!inventory) throw new Error("Inventory record not found");
-
-  inventory.stock.available += qty;
-  if (inventory.stock.dispatched >= qty) {
-    inventory.stock.dispatched -= qty;
-  } else {
-    inventory.stock.dispatched = 0;
-  }
-
-  await inventory.save();
-
-  await InventoryTransaction.create({
-    product: productId,
-    location: locationId,
-    type: "INWARD",
-    quantity: qty,
-    reference,
-    user
-  });
-
-  return inventory;
-};
-
-// -------------------- Controllers --------------------
-
-// Get stock by product & location (with product + batch details)
-exports.getStockByItemId = async (req, res) => {
+// Add to inventory (Product or RawMaterial)
+exports.addInventoryItem = async (req, res) => {
   try {
-    const { productId, locationId } = req.params;
-    const inventory = await Inventory.findOne({ product: productId, location: locationId })
-      .populate("product")
-      .populate("location");
+    const { itemType, itemRef, quantity, unit, branch } = req.body;
 
-    if (!inventory) return res.status(404).json({ error: "No stock found for this product/location" });
+    // Safeguard: Check existence
+    if (itemType === "Product") {
+      const product = await Product.findById(itemRef);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+    } // You should also add RawMaterial model and check here.
 
-    const product = inventory.product;
-
-    res.status(200).json({
-      product: {
-        id: product._id,
-        name: product.name,
-        category: product.category,
-        supplier: product.supplier,
-        gstRate: product.gstRate,
-        price: product.price,
-        batches: product.batches?.map(b => ({
-          batchNo: b.batchNo,
-          productionDate: b.productionDate,
-          expiryDate: b.expiryDate,
-          qty: b.qty
-        }))
-      },
-      location: inventory.location.name,
-      stock: inventory.stock
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// Adjust stock manually
-exports.adjustStock = async (req, res) => {
-  try {
-    const { productId, type, quantity, reference, reason, locationId, user } = req.body;
-
-    if (!productId || !type || typeof quantity !== "number" || !locationId) {
-      return res.status(400).json({ error: "Missing or invalid fields" });
-    }
-
-    let inventory = await Inventory.findOne({ product: productId, location: locationId });
-    if (!inventory) {
-      inventory = await Inventory.create({
-        product: productId,
-        location: locationId,
-        stock: { available: 0, reserved: 0, dispatched: 0 }
+    // Find or Create InventoryItem
+    let inv = await InventoryItem.findOne({ itemType, itemRef, branch });
+    if (!inv) {
+      inv = await InventoryItem.create({
+        itemType, itemRef, branch, available: quantity, unit
       });
+    } else {
+      inv.available += quantity;
+      await inv.save();
     }
 
-    switch (type.toUpperCase()) {
-      case "INWARD":
-        inventory.stock.available += quantity;
-        break;
-      case "OUTWARD":
-      case "ISSUE":
-        if (inventory.stock.available < quantity) return res.status(400).json({ error: "Insufficient stock" });
-        inventory.stock.available -= quantity;
-        break;
-      case "ADJUSTMENT":
-        inventory.stock.available = quantity;
-        inventory.stock.reserved = 0;
-        inventory.stock.dispatched = 0;
-        break;
-    }
-
-    await inventory.save();
-
+    // Register Transaction
     await InventoryTransaction.create({
-      product: productId,
-      location: locationId,
-      type: type.toUpperCase(),
-      quantity,
-      reference,
-      notes: reason,
-      user
+      itemType, itemRef, branch, action: "Add", quantity, unit
     });
 
-    res.status(200).json({
-      message: "Stock adjusted successfully",
-      stock: inventory.stock
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// List inventory (with product + batch + pricing info, without IDs)
-exports.listInventory = async (req, res) => {
-  try {
-    const { productId, locationId } = req.query;
-    const query = {};
-    if (productId) query.product = productId;
-    if (locationId) query.location = locationId;
-
-    const inventories = await Inventory.find(query)
-      .populate("product")
-      .populate("location")
-      .sort({ updatedAt: -1 });
-
-    const data = inventories.map(inv => {
-      const available = inv.stock?.available || 0;
-      let status = "In Stock";
-      if (available === 0) status = "Out of Stock";
-      else if (available < 5) status = "Low Stock";
-
-      const product = inv.product;
-      const pricing = product?.pricing?.[0] || { price: 0, gst: 0 };
-
-      return {
-        inventoryId: inv._id,   
-        productName: product?.name,
-        sku: product?.sku,
-        category: product?.category,
-        supplier: product?.supplier,
-        price: pricing.price,
-        gstRate: pricing.gst,
-        batches: product?.batches?.map(b => ({
-          batchNo: b.batchNo,
-          lotNo: b.lotNo,
-          productionDate: b.productionDate,
-          expiryDate: b.expiryDate,
-        })),
-        locationName: inv.location?.name,
-        stock: {
-          available: inv.stock?.available || 0,
-          reserved: inv.stock?.reserved || 0,
-          dispatched: inv.stock?.dispatched || 0,
-          current:
-            (inv.stock?.available || 0) +
-            (inv.stock?.reserved || 0) +
-            (inv.stock?.dispatched || 0)
-        },
-        status,
-        lastUpdated: inv.updatedAt
-      };
-    });
-
-    res.status(200).json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-
-// Edit inventory
-exports.editInventory = async (req, res) => {
-  try {
-    const { inventoryId } = req.params;
-    const updates = req.body;
-
-    const inventory = await Inventory.findByIdAndUpdate(inventoryId, updates, { new: true })
-      .populate("product")
-      .populate("location");
-
-    if (!inventory) return res.status(404).json({ error: "Inventory record not found" });
-
-    res.status(200).json({ message: "Inventory updated", inventory });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// Delete inventory
-exports.deleteInventory = async (req, res) => {
-  try {
-    const { inventoryId } = req.params;
-    const inventory = await Inventory.findByIdAndDelete(inventoryId);
-
-    if (!inventory) return res.status(404).json({ error: "Inventory record not found" });
-
-    res.status(200).json({ message: "Inventory deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// -------------------- Location Management --------------------
-exports.getLocations = async (req, res) => {
-  try {
-    const locations = await Location.find({});
-    res.status(200).json({ locations });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-exports.createLocation = async (req, res) => {
-  try {
-    const location = await Location.create(req.body);
-    res.status(201).json({ location });
+    res.status(201).json(inv);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 };
 
-// -------------------- Location Update --------------------
-exports.updateLocation = async (req, res) => {
+// Get all inventory for main store or branch
+exports.getInventory = async (req, res) => {
+  const { branch } = req.query; // branch is ObjectId
   try {
-    const { locationId } = req.params;
-    const updateData = req.body;
+    const q = branch ? { branch } : {};
+    const items = await InventoryItem.find(q)
+       .populate("itemRef")
+       .populate("branch");
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
-    const location = await Location.findByIdAndUpdate(locationId, updateData, {
-      new: true,
-      runValidators: true
+// Consume Raw Material (deducts stock)
+exports.consumeRawMaterial = async (req, res) => {
+  try {
+    const { itemRef, quantity, unit, branch, relatedProductionBatch, remarks } = req.body;
+
+    // Find InventoryItem
+    let inv = await InventoryItem.findOne({ itemType: "RawMaterial", itemRef, branch });
+    if (!inv) return res.status(404).json({ error: "Raw Material not found in inventory" });
+    if (inv.available < quantity) return res.status(400).json({ error: "Not enough raw material stock" });
+
+    inv.available -= quantity;
+    await inv.save();
+
+    // Register Transaction
+    await InventoryTransaction.create({
+      itemType: "RawMaterial", itemRef, branch, action: "Consume", 
+      quantity, unit, relatedProductionBatch, remarks
     });
 
-    if (!location) {
-      return res.status(404).json({ error: "Location not found" });
-    }
-
-    res.status(200).json({ message: "Location updated successfully", location });
+    res.json(inv);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 };
 
-// -------------------- Location Delete --------------------
-exports.deleteLocation = async (req, res) => {
+// Transfer stock between branches
+exports.transferStock = async (req, res) => {
   try {
-    const { locationId } = req.params;
+    const { itemType, itemRef, fromBranch, toBranch, quantity, unit, remarks } = req.body;
+    if (!fromBranch || !toBranch) return res.status(400).json({ error: "Both branches required" });
 
-    const location = await Location.findByIdAndDelete(locationId);
+    // Deduct from source
+    let fromInv = await InventoryItem.findOne({ itemType, itemRef, branch: fromBranch });
+    if (!fromInv || fromInv.available < quantity)
+      return res.status(400).json({ error: "Not enough stock at source" });
+    fromInv.available -= quantity;
+    await fromInv.save();
 
-    if (!location) {
-      return res.status(404).json({ error: "Location not found" });
+    // Add to destination
+    let toInv = await InventoryItem.findOne({ itemType, itemRef, branch: toBranch });
+    if (!toInv) {
+      toInv = await InventoryItem.create({ itemType, itemRef, branch: toBranch, available: quantity, unit });
+    } else {
+      toInv.available += quantity;
+      await toInv.save();
     }
 
-    res.status(200).json({ message: "Location deleted successfully" });
+    // Register Transactions
+    await InventoryTransaction.create([
+      {
+        itemType, itemRef, branch: fromBranch, action: "TransferOut", quantity, unit, remarks
+      },
+      {
+        itemType, itemRef, branch: toBranch, action: "TransferIn", quantity, unit, remarks
+      }
+    ]);
+    res.json({ from: fromInv, to: toInv });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// Get inventory transactions log
+exports.getTransactions = async (req, res) => {
+  const { branch, itemType } = req.query;
+  const q = {};
+  if (branch) q.branch = branch;
+  if (itemType) q.itemType = itemType;
+  try {
+    const txns = await InventoryTransaction.find(q)
+      .populate("itemRef")
+      .populate("branch")
+      .populate("relatedProductionBatch")
+      .sort({ createdAt: -1 });
+    res.json(txns);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
-
-
-// -------------------- Export helpers --------------------
-module.exports.reserveStockInternal = reserveStockInternal;
-module.exports.releaseStockInternal = releaseStockInternal;
-module.exports.confirmStockInternal = confirmStockInternal;
-module.exports.restoreStockInternal = restoreStockInternal;
